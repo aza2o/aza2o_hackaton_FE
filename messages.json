@@ -1,0 +1,111 @@
+{
+  "_comment": "키 규칙: {shiftType}_{nudgeKind}_{debtState}_{n}  |  shiftType: day/evening/night/off  |  debtState: normal(부채 120분 미만) / high(120분 이상)  |  없는 키는 {nudgeKind}_fallback_1 로 폴백  |  진단·치료 표현 금지",
+
+  "caffeineCutoff_fallback_1": "지금부터는 카페인을 넘어가는 게 좋아요. 오늘 잠에 영향이 남을 시간대예요.",
+  "lightBlock_fallback_1": "슬슬 조명을 낮춰볼까요. 밝기를 줄이는 것만으로도 잠들기가 수월해져요.",
+  "lightExposure_fallback_1": "일어나셨다면 밝은 빛을 쬐어주세요. 몸이 하루의 시작을 인식해요.",
+  "windDown_fallback_1": "한 시간 뒤가 목표 취침 시각이에요. 슬슬 마무리해볼까요.",
+  "napStart_fallback_1": "지금 눈 붙이기 좋은 시간이에요.",
+  "sunglassesCommute_fallback_1": "나가시기 전에 선글라스 챙기세요. 직접 운전하신다면 시야 확보를 먼저 살펴주세요.",
+  "brightLightAtWork_fallback_1": "근무 초반에 밝은 곳에 머물러보세요. 지금의 빛이 오늘 리듬을 잡아줘요.",
+
+  "night_sunglassesCommute_normal_1": "퇴근 전 선글라스 준비해두세요. 건물 나서기 전에 쓰는 게 가장 효과적이에요. 운전하신다면 시야부터 확인해주세요.",
+  "night_sunglassesCommute_normal_2": "아침 햇빛은 몸에게 '하루 시작'이라고 말해요. 오늘은 그 신호를 잠시 막아둘게요. 직접 운전 시에는 안전을 먼저 살펴주세요.",
+  "night_sunglassesCommute_high_1": "이번 주 잠이 많이 밀렸어요. 퇴근길 햇빛만 막아도 낮잠의 질이 달라져요. 운전하신다면 시야 확보부터 확인해주세요.",
+  "night_sunglassesCommute_high_2": "집까지 어둡게 가는 게 오늘의 가장 중요한 한 가지예요. 다만 직접 운전하신다면 안전이 먼저예요.",
+
+  "night_brightLightAtWork_normal_1": "근무 초반에는 밝은 곳에 머물러보세요. 종료 두 시간 전부터는 조금 낮추는 게 좋아요.",
+  "night_brightLightAtWork_normal_2": "지금 쬐는 빛이 오늘 밤 각성을 지켜줘요. 스테이션 조명 아래 잠깐이라도 서 계셔보세요.",
+  "night_brightLightAtWork_high_1": "피로가 쌓인 날일수록 근무 초반의 빛이 중요해요. 밝은 곳에서 시작해볼까요.",
+  "night_brightLightAtWork_high_2": "졸음이 오기 전에 미리 밝은 빛을 쬐어두면 새벽이 한결 나아요.",
+
+  "night_caffeineCutoff_normal_1": "이 시각 이후의 커피는 퇴근 후 잠까지 따라와요. 지금이 마지막 한 잔이에요.",
+  "night_caffeineCutoff_normal_2": "카페인은 생각보다 오래 남아요. 지금부터는 물이나 차로 바꿔볼까요.",
+  "night_caffeineCutoff_high_1": "잠이 밀린 주에는 카페인이 더 오래 붙잡아요. 지금부터 줄여두면 낮잠이 편해져요.",
+  "night_caffeineCutoff_high_2": "오늘은 낮에 제대로 자는 게 목표예요. 그러려면 지금부터가 중요해요.",
+
+  "night_lightBlock_normal_1": "집에 도착하시면 커튼부터 닫아주세요. 어두울수록 낮잠이 깊어져요.",
+  "night_lightBlock_normal_2": "잠들기 두 시간 전이에요. 조명과 화면 밝기를 낮춰볼까요.",
+  "night_lightBlock_high_1": "밀린 잠을 회복할 기회예요. 방을 최대한 어둡게 만들어주세요.",
+  "night_lightBlock_high_2": "빛 한 줄기가 낮잠을 얕게 만들어요. 안대나 암막 커튼을 챙겨보세요.",
+
+  "night_windDown_normal_1": "한 시간 뒤가 목표 취침이에요. 씻고 정리하기 좋은 시간이에요.",
+  "night_windDown_normal_2": "슬슬 몸을 재울 준비를 시작해볼까요. 화면은 잠시 내려두시고요.",
+  "night_windDown_high_1": "오늘은 조금이라도 일찍 눕는 게 목표예요. 지금부터 마무리해볼까요.",
+  "night_windDown_high_2": "할 일이 남았어도 오늘은 잠을 먼저 챙겨보면 어떨까요.",
+
+  "night_lightExposure_normal_1": "일어나셨다면 창가에 잠깐 서보세요. 몸이 깨어날 준비를 해요.",
+  "night_lightExposure_normal_2": "기상 직후의 빛이 다음 근무를 버티게 해줘요.",
+  "night_lightExposure_high_1": "무겁게 느껴져도 밝은 곳으로 나가보세요. 회복이 빨라져요.",
+  "night_lightExposure_high_2": "몇 분이라도 햇빛을 쬐면 남은 하루가 달라져요.",
+
+  "night_napStart_normal_1": "근무 전 20분, 지금이 눈 붙이기 좋은 시간이에요.",
+  "night_napStart_normal_2": "짧게 자두면 새벽 시간대가 훨씬 수월해져요.",
+  "night_napStart_high_1": "잠이 많이 밀렸어요. 오늘은 한 주기만큼 길게 자보는 게 좋겠어요.",
+  "night_napStart_high_2": "출근 전 회복 시간이에요. 알람 맞추고 눈 붙여볼까요.",
+
+  "evening_caffeineCutoff_normal_1": "이 시각 이후의 카페인은 오늘 잠을 줄여요. 지금이 마지막이에요.",
+  "evening_caffeineCutoff_normal_2": "퇴근 후 잠들 시간을 생각하면 지금부터는 무카페인이 좋아요.",
+  "evening_caffeineCutoff_high_1": "잠이 밀린 상태예요. 오늘은 카페인을 여기서 끊어볼까요.",
+  "evening_caffeineCutoff_high_2": "회복이 필요한 주예요. 지금부터는 물이나 차로 바꿔보세요.",
+
+  "evening_lightBlock_normal_1": "퇴근하고 집에 오시면 조명을 낮춰주세요. 잠들기가 수월해져요.",
+  "evening_lightBlock_normal_2": "취침 두 시간 전이에요. 밝은 화면은 잠시 접어둘까요.",
+  "evening_lightBlock_high_1": "오늘은 깊게 자는 게 목표예요. 방을 어둡게 만들어주세요.",
+  "evening_lightBlock_high_2": "빛을 줄이는 것만으로도 입면이 빨라져요.",
+
+  "evening_windDown_normal_1": "한 시간 뒤가 목표 취침이에요. 슬슬 정리해볼까요.",
+  "evening_windDown_normal_2": "몸을 식히고 마음을 가라앉힐 시간이에요.",
+  "evening_windDown_high_1": "밀린 잠을 조금이라도 되찾을 기회예요. 지금부터 마무리해요.",
+  "evening_windDown_high_2": "오늘은 평소보다 조금 일찍 누워보면 어떨까요.",
+
+  "evening_lightExposure_normal_1": "일어나셨다면 밝은 빛을 쬐어주세요. 리듬이 자리를 잡아요.",
+  "evening_lightExposure_normal_2": "기상 후 30분 안의 빛이 하루를 정돈해줘요.",
+  "evening_lightExposure_high_1": "무겁더라도 창가로 나가보세요. 회복에 도움이 돼요.",
+  "evening_lightExposure_high_2": "햇빛 몇 분이 오늘 컨디션을 바꿔요.",
+
+  "evening_napStart_normal_1": "근무 전 짧은 낮잠 시간이에요. 20분이면 충분해요.",
+  "evening_napStart_normal_2": "출근 전에 눈 붙이면 후반이 편해져요.",
+  "evening_napStart_high_1": "잠이 많이 밀렸어요. 오늘은 길게 한 주기 자보세요.",
+  "evening_napStart_high_2": "회복이 필요한 날이에요. 알람 맞추고 쉬어볼까요.",
+
+  "day_caffeineCutoff_normal_1": "지금이 오늘의 마지막 카페인 타이밍이에요.",
+  "day_caffeineCutoff_normal_2": "이 시각을 넘기면 밤잠이 짧아져요. 지금 한 잔까지만요.",
+  "day_caffeineCutoff_high_1": "잠이 밀린 주예요. 오늘은 여기서 카페인을 끊어볼까요.",
+  "day_caffeineCutoff_high_2": "회복하려면 오늘 밤이 중요해요. 지금부터는 무카페인으로요.",
+
+  "day_lightBlock_normal_1": "취침 두 시간 전이에요. 조명을 한 단계 낮춰볼까요.",
+  "day_lightBlock_normal_2": "화면 밝기를 줄이면 잠들기가 한결 쉬워져요.",
+  "day_lightBlock_high_1": "오늘은 깊게 자는 게 목표예요. 방을 어둡게 해주세요.",
+  "day_lightBlock_high_2": "빛을 줄이는 것부터 시작해볼까요.",
+
+  "day_windDown_normal_1": "한 시간 뒤가 목표 취침 시각이에요.",
+  "day_windDown_normal_2": "슬슬 하루를 접을 시간이에요.",
+  "day_windDown_high_1": "밀린 잠을 되찾을 기회예요. 오늘은 조금 일찍 누워볼까요.",
+  "day_windDown_high_2": "남은 일보다 잠이 먼저인 날이에요.",
+
+  "day_lightExposure_normal_1": "일어나셨다면 창가에서 몇 분만 보내보세요.",
+  "day_lightExposure_normal_2": "아침 빛이 오늘 밤 잠까지 정돈해줘요.",
+  "day_lightExposure_high_1": "무겁더라도 밝은 곳으로 나가보세요. 회복이 빨라져요.",
+  "day_lightExposure_high_2": "햇빛 몇 분이 하루의 리듬을 잡아줘요.",
+
+  "off_caffeineCutoff_normal_1": "쉬는 날이어도 카페인 시계는 똑같이 돌아가요. 지금이 마지막이에요.",
+  "off_caffeineCutoff_normal_2": "오늘 잘 자두면 다음 근무가 편해져요. 지금부터는 물이나 차로요.",
+  "off_caffeineCutoff_high_1": "회복이 필요한 주예요. 오늘은 여기서 끊어볼까요.",
+  "off_caffeineCutoff_high_2": "쉬는 날의 잠이 이번 주를 결정해요. 지금부터가 중요해요.",
+
+  "off_lightBlock_normal_1": "취침 두 시간 전이에요. 조명을 낮춰볼까요.",
+  "off_lightBlock_normal_2": "쉬는 날일수록 취침 시각이 흔들리기 쉬워요. 빛부터 줄여봐요.",
+  "off_lightBlock_high_1": "오늘은 제대로 회복하는 날이에요. 방을 어둡게 만들어주세요.",
+  "off_lightBlock_high_2": "화면을 내려두면 잠이 훨씬 빨리 와요.",
+
+  "off_windDown_normal_1": "한 시간 뒤가 목표 취침이에요. 쉬는 날에도 시각은 지켜볼까요.",
+  "off_windDown_normal_2": "오늘의 취침 시각을 지키면 다음 근무가 수월해져요.",
+  "off_windDown_high_1": "밀린 잠을 되찾기 좋은 날이에요. 슬슬 준비해볼까요.",
+  "off_windDown_high_2": "푹 자는 게 오늘의 할 일이에요.",
+
+  "off_lightExposure_normal_1": "일어나셨다면 밝은 빛을 쬐어주세요.",
+  "off_lightExposure_normal_2": "쉬는 날 아침의 빛이 리듬을 되돌려줘요.",
+  "off_lightExposure_high_1": "늦게 일어나셨어도 괜찮아요. 지금 빛을 쬐면 돼요.",
+  "off_lightExposure_high_2": "창가에서 몇 분만 보내보세요. 오늘이 달라져요."
+}

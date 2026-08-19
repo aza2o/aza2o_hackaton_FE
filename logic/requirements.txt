@@ -1,0 +1,9 @@
+fastapi>=0.138
+uvicorn>=0.30
+pydantic>=2.13
+numpy>=2.4
+matplotlib>=3.10
+circadian==1.0.3
+python-multipart>=0.0.20
+openpyxl>=3.1
+xlrd>=2.0

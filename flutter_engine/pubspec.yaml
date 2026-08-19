@@ -1,0 +1,14 @@
+name: shift_circadian_engine
+description: >
+  SHIFT 서캐디언 엔진의 Dart 포팅 — Arcascope circadian v1.0.3의
+  Forger99/Hannay19/Hannay19TP/Jewett99 ODE 모델을 클라이언트에서 계산하기 위한
+  코어. Flutter 앱의 lib/engine/ 아래로 그대로 옮겨 쓸 수 있도록 순수 Dart
+  패키지로 작성했다 (Flutter 의존성 없음).
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dev_dependencies:
+  test: ^1.24.0

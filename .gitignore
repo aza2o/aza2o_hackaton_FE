@@ -1,0 +1,20 @@
+# Flutter build artifacts (shift_app/, flutter_engine/ — 각 서브프로젝트
+# 자체 .gitignore도 있지만, 여기 최상위에서 한 번 더 확실히 막아둔다).
+shift_app/build/
+shift_app/.dart_tool/
+flutter_engine/build/
+flutter_engine/.dart_tool/
+
+# Python (logic/)
+**/__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Claude Code 로컬 상태 — 기기별이라 공유 대상 아님.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

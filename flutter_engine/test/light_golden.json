@@ -1,0 +1,130 @@
+{
+  "sun_times": [
+    {
+      "date": "2026-08-17",
+      "lat": 35.87,
+      "lon": 128.6,
+      "rise": 5.775831464678049,
+      "set": 19.260864336043596
+    },
+    {
+      "date": "2026-01-01",
+      "lat": 35.87,
+      "lon": 128.6,
+      "rise": 7.614393945783377,
+      "set": 17.382141340523958
+    },
+    {
+      "date": "2026-12-21",
+      "lat": 35.87,
+      "lon": 128.6,
+      "rise": 7.548171903938055,
+      "set": 17.269568916410208
+    }
+  ],
+  "sleep": [
+    {
+      "start": 22.5,
+      "end": 30.0,
+      "kind": "main"
+    },
+    {
+      "start": 46.5,
+      "end": 54.0,
+      "kind": "main"
+    },
+    {
+      "start": 73.5,
+      "end": 83.0,
+      "kind": "main"
+    },
+    {
+      "start": 91.0,
+      "end": 93.5,
+      "kind": "prophylactic_nap"
+    },
+    {
+      "start": 103.33333333333333,
+      "end": 108.83333333333333,
+      "kind": "main"
+    },
+    {
+      "start": 116.0,
+      "end": 117.5,
+      "kind": "prophylactic_nap"
+    },
+    {
+      "start": 127.33333333333333,
+      "end": 132.83333333333331,
+      "kind": "main"
+    },
+    {
+      "start": 168.0,
+      "end": 176.0,
+      "kind": "main"
+    }
+  ],
+  "light_series": {
+    "n": 1680,
+    "sample_indices": [
+      0,
+      50,
+      100,
+      230,
+      500,
+      719,
+      1000,
+      1500,
+      1679
+    ],
+    "sample_light": [
+      200.0,
+      200.0,
+      300.0,
+      30.0,
+      30.0,
+      5.0,
+      300.0,
+      200.0,
+      5.0
+    ]
+  },
+  "intervention_windows": [
+    {
+      "start": 95.0,
+      "end": 99.0,
+      "action": "bright_light",
+      "reason": "\uc57c\uac04\uadfc\ubb34 \uc804\ubc18\ubd80 \uac01\uc131 \uc720\uc9c0"
+    },
+    {
+      "start": 103.0,
+      "end": 103.33333333333333,
+      "action": "blue_blocker",
+      "reason": "\uc77c\ucd9c 5.83h \u2014 \uadc0\uac00 \uc911 \uad11\ub178\ucd9c \ucc28\ub2e8"
+    },
+    {
+      "start": 103.33333333333333,
+      "end": 108.83333333333333,
+      "action": "blackout",
+      "reason": "\uc8fc\uac04\uc218\uba74 \uc9c4\uc785 \ubcf4\uc870"
+    },
+    {
+      "start": 119.0,
+      "end": 123.0,
+      "action": "bright_light",
+      "reason": "\uc57c\uac04\uadfc\ubb34 \uc804\ubc18\ubd80 \uac01\uc131 \uc720\uc9c0"
+    },
+    {
+      "start": 127.0,
+      "end": 127.33333333333333,
+      "action": "blue_blocker",
+      "reason": "\uc77c\ucd9c 5.84h \u2014 \uadc0\uac00 \uc911 \uad11\ub178\ucd9c \ucc28\ub2e8"
+    },
+    {
+      "start": 127.33333333333333,
+      "end": 132.83333333333331,
+      "action": "blackout",
+      "reason": "\uc8fc\uac04\uc218\uba74 \uc9c4\uc785 \ubcf4\uc870"
+    }
+  ]
+}
