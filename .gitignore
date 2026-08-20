@@ -18,3 +18,6 @@ flutter_engine/.dart_tool/
 # Claude Code 로컬 상태 — 기기별이라 공유 대상 아님.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Supabase CLI 로컬 링크 상태(어느 프로젝트에 링크됐는지 등, 기기별).
+supabase/.temp/

@@ -12,7 +12,11 @@ import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
 import '../engine/gap_service.dart';
 
-const _reportUrl = 'https://zfwmwplxezqtxxbgmieb.supabase.co/functions/v1/report';
+// 2026-08-20: 원래 프로젝트(zfwmwplxezqtxxbgmieb) 오너 초대가 막혀서 새
+// 프로젝트(aza2o-shift-report, ap-northeast-2)로 옮김 — 함수 소스는
+// `supabase/functions/report/index.ts` 참고. 원 프로젝트 접근 가능해지면
+// 다시 합칠지 결정할 것.
+const _reportUrl = 'https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report';
 const _reportWindowDays = 14;
 
 class AiReportResult {
