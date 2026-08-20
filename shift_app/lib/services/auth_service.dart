@@ -123,7 +123,6 @@ class AuthService {
   }
 
   static Future<void> restoreLocalProfile() async {
-    if (AppState.instance.isDemoAccount) return;
     if (!isAuthenticated) return;
     final user = _client.auth.currentUser;
     if (user == null) return;

@@ -2,6 +2,7 @@
 // 생겨서(다른 화면은 선택형 UI 위주) 기존 카드류(`_ShiftTimingRow`,
 // `_ChoiceRow`)와 같은 라운드·회색 보더 톤으로 새로 맞췄다.
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -38,25 +39,54 @@ class AuthField extends StatelessWidget {
           child: Text(label, style: AppTypography.subtitle04),
         ),
         const SizedBox(height: AppSpacing.sm),
-        TextFormField(
-          controller: controller,
-          obscureText: obscureText,
-          keyboardType: keyboardType,
-          validator: validator,
-          style: AppTypography.body02,
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: AppColors.grayWhite,
-            contentPadding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.xl, vertical: AppSpacing.xl),
-            border: border,
-            enabledBorder: border,
-            focusedBorder: border.copyWith(
-                borderSide: const BorderSide(color: AppColors.primary500, width: 1.5)),
-            errorBorder: border.copyWith(borderSide: const BorderSide(color: AppColors.error01)),
-            focusedErrorBorder:
-                border.copyWith(borderSide: const BorderSide(color: AppColors.error01, width: 1.5)),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x24475A76),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Color(0x99FFFFFF),
+                blurRadius: 8,
+                offset: Offset(-2, -2),
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: controller,
+            obscureText: obscureText,
+            keyboardType: keyboardType,
+            validator: validator,
+            style: AppTypography.body02,
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: AppColors.grayWhite,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xl,
+                vertical: AppSpacing.xl,
+              ),
+              border: border,
+              enabledBorder: border,
+              focusedBorder: border.copyWith(
+                borderSide: const BorderSide(
+                  color: AppColors.primary500,
+                  width: 1.5,
+                ),
+              ),
+              errorBorder: border.copyWith(
+                borderSide: const BorderSide(color: AppColors.error01),
+              ),
+              focusedErrorBorder: border.copyWith(
+                borderSide: const BorderSide(
+                  color: AppColors.error01,
+                  width: 1.5,
+                ),
+              ),
+            ),
           ),
         ),
       ],

@@ -9,6 +9,7 @@ import 'package:shift_app/screens/onboarding_flow.dart';
 import 'package:shift_app/screens/permission_screen.dart';
 import 'package:shift_app/screens/home_screen.dart';
 import 'package:shift_app/screens/settings_screen.dart';
+import 'package:shift_app/state/app_state.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
@@ -21,7 +22,9 @@ void main() {
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
 
-    final buttonAfter = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+    final buttonAfter = tester.widget<ElevatedButton>(
+      find.byType(ElevatedButton),
+    );
     expect(buttonAfter.onPressed, isNotNull);
   });
 
@@ -63,11 +66,11 @@ void main() {
     expect(find.text('월간'), findsOneWidget);
   });
 
-  testWidgets('온보딩 플로우 → 4단계를 거쳐 권한 화면까지 도달', (tester) async {
+  testWidgets('온보딩 플로우 → 5단계를 거쳐 권한 화면까지 도달', (tester) async {
     await tester.pumpWidget(_wrap(const OnboardingFlow()));
     expect(find.text('근무 시각을 알려주세요'), findsOneWidget);
 
-    for (final _ in [0, 1, 2]) {
+    for (final _ in [0, 1, 2, 3]) {
       await tester.tap(find.text('다음'));
       await tester.pumpAndSettle();
     }
@@ -91,8 +94,10 @@ void main() {
 
   testWidgets('온보딩 헬스 연동 카드 → 확인하면 수면 기록을 찾고 체크리스트가 갱신된다', (tester) async {
     // 실기기 플랫폼 채널이 없는 위젯 테스트 환경이라 DemoHealthSource를 주입한다.
-    await tester.pumpWidget(_wrap(const OnboardingFlow(healthSource: DemoHealthSource())));
-    for (final _ in [0, 1, 2]) {
+    await tester.pumpWidget(
+      _wrap(const OnboardingFlow(healthSource: DemoHealthSource())),
+    );
+    for (final _ in [0, 1, 2, 3]) {
       await tester.tap(find.text('다음'));
       await tester.pumpAndSettle();
     }
@@ -119,16 +124,18 @@ void main() {
     // 예전엔 둘 다 별도 화면으로 들어가야 볼 수 있었다. 지금은 홈 하단에
     // 펼쳐지고, 액토그램 같은 상세만 AI 리포트로 넘긴다.
     // ListView가 지연 생성이라, 화면 밖 섹션은 스크롤해야 만들어진다.
-    await tester.binding.setSurfaceSize(const Size(400, 1400));
+    await tester.binding.setSurfaceSize(const Size(400, 5000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    AppState.instance.saveConsent(privacy: true, ai: true);
+    AppState.instance.saveAiComment('테스트용 개인화 인사이트');
+
+    await tester.pumpWidget(
+      _wrap(const HomeScreen(healthSource: DemoHealthSource())),
+    );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('오늘의 인사이트'), 300);
-    expect(find.text('오늘의 인사이트'), findsOneWidget);
-
-    await tester.scrollUntilVisible(find.text('피부 루틴'), 300);
+    expect(find.text('AI 오늘의 한 줄'), findsOneWidget);
     expect(find.text('피부 루틴'), findsOneWidget);
 
     await tester.tap(find.text('리듬 자세히 보기'));
@@ -142,16 +149,27 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(400, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
-    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    await tester.pumpWidget(
+      _wrap(const HomeScreen(healthSource: DemoHealthSource())),
+    );
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('피부 루틴'), 300);
-    expect(find.text('무엇을 바르는지가 아니라 언제 바르는지를 제안해요'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('피부 루틴'),
+      300,
+      scrollable: find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.down,
+      ),
+    );
+    expect(find.text('벽시계의 AM·PM 대신, 내 근무와 수면에 맞춘 생체 루틴'), findsOneWidget);
     expect(find.textContaining('점'), findsNothing);
   });
 
   testWidgets('홈 헤더 설정 아이콘 → 설정 화면으로 이동', (tester) async {
-    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    await tester.pumpWidget(
+      _wrap(const HomeScreen(healthSource: DemoHealthSource())),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.settings_rounded));
@@ -159,10 +177,13 @@ void main() {
     expect(find.byType(SettingsScreen), findsOneWidget);
   });
 
-  testWidgets('홈 화면 → 계산 엔진이 실제 넛지를 채워 렌더링한다 (로딩 스피너가 사라지고 행동 목록이 뜸)',
-      (tester) async {
+  testWidgets('홈 화면 → 계산 엔진이 실제 넛지를 채워 렌더링한다 (로딩 스피너가 사라지고 행동 목록이 뜸)', (
+    tester,
+  ) async {
     // 실기기 플랫폼 채널이 없는 위젯 테스트 환경이라 DemoHealthSource를 주입한다.
-    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    await tester.pumpWidget(
+      _wrap(const HomeScreen(healthSource: DemoHealthSource())),
+    );
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
     await tester.pumpAndSettle();

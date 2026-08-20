@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shift_circadian_engine/roster/constants.dart' show shiftTypeFromCode;
+import 'package:shift_circadian_engine/roster/constants.dart'
+    show shiftTypeFromCode;
+
 import '../engine/nudge_service.dart';
 import '../services/notification_service.dart';
 import '../state/app_state.dart';
@@ -40,6 +42,7 @@ class RosterConfirmScreen extends StatefulWidget {
 
 class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
   static const _demoPattern = ['D', 'D', 'E', 'E', 'N', 'N', 'O'];
+  bool _isSubmitting = false;
 
   bool get _isDemo => widget.initialShifts == null;
 
@@ -53,11 +56,38 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
   late final int _daysInMonth = DateTime(_year, _month + 1, 0).day;
 
   late final List<String> _shifts = _isDemo
-      ? List.generate(_daysInMonth, (i) => _demoPattern[i % _demoPattern.length])
+      ? List.generate(
+          _daysInMonth,
+          (i) => _demoPattern[i % _demoPattern.length],
+        )
       : List.generate(_daysInMonth, (i) => widget.initialShifts![i + 1] ?? 'O');
 
-  late final int _unmappedCodeCount =
-      _isDemo ? 2 : widget.unmappedCodes.length;
+  late final int _unmappedCodeCount = _isDemo ? 2 : widget.unmappedCodes.length;
+
+  Future<void> _confirmAndContinue() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+
+    AppState.instance.saveRoster(
+      _shifts.map(shiftTypeFromCode).toList(),
+      startDate: DateTime(_year, _month, 1),
+    );
+
+    try {
+      await (() async {
+        final nudges = await loadUpcomingNudgeTriggers();
+        await NotificationService.instance.rescheduleAll(nudges);
+      })().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // 알림 권한 거부나 플랫폼 채널 지연은 홈 진입을 막지 않는다.
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const RootShell()),
+      (route) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +95,9 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
       appBar: AppBar(
         title: Text(
           '$_year년 $_month월 근무표 확인',
-          style: AppTypography.subtitle03.copyWith(color: AppColors.textPrimary),
+          style: AppTypography.subtitle03.copyWith(
+            color: AppColors.textPrimary,
+          ),
         ),
         foregroundColor: AppColors.textPrimary,
       ),
@@ -73,13 +105,14 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
-            Text(
-              '$_year년 $_month월',
-              style: AppTypography.heading04,
-            ),
+            Text('$_year년 $_month월', style: AppTypography.heading04),
             const SizedBox(height: AppSpacing.xs),
-            Text('${widget.userName} 간호사 · 잘못된 날짜는 눌러서 수정하세요',
-                style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
+            Text(
+              '${widget.userName} 간호사 · 잘못된 날짜는 눌러서 수정하세요',
+              style: AppTypography.body02.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
             const SizedBox(height: AppSpacing.lg),
             const WeekdayHeader(),
             const SizedBox(height: AppSpacing.xs),
@@ -113,9 +146,12 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
                       style: AppTypography.subtitle04,
                     ),
                     const SizedBox(height: 4),
-                    Text('일단 오프(O)로 표시해뒀어요 — 날짜를 눌러 실제 근무로 바꿔주세요',
-                        style: AppTypography.caption01
-                            .copyWith(color: AppColors.textSecondary)),
+                    Text(
+                      '일단 오프(O)로 표시해뒀어요 — 날짜를 눌러 실제 근무로 바꿔주세요',
+                      style: AppTypography.caption01.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -129,24 +165,20 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
                   backgroundColor: AppColors.primary500,
                   foregroundColor: AppColors.gray900,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-                onPressed: () async {
-                  AppState.instance.saveRoster(
-                    _shifts.map(shiftTypeFromCode).toList(),
-                    startDate: DateTime(_year, _month, 1),
-                  );
-                  // 오늘·내일치 넛지를 실제 알림으로 재예약한다(§7-2).
-                  // 실패해도(권한 거부 등) 다음 화면 진행을 막지 않는다.
-                  await NotificationService.instance
-                      .rescheduleAll(await loadUpcomingNudgeTriggers());
-                  if (!context.mounted) return;
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const RootShell()),
-                    (route) => false,
-                  );
-                },
-                child: Text('확인하고 넛지 받기', style: AppTypography.button03),
+                onPressed: _isSubmitting ? null : _confirmAndContinue,
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: AppColors.gray900,
+                        ),
+                      )
+                    : Text('확인하고 넛지 받기', style: AppTypography.button03),
               ),
             ),
           ],
