@@ -52,13 +52,12 @@ class _RosterCalendarScreenState extends State<RosterCalendarScreen> {
     final roster = s.roster;
     if (start == null || roster == null) return null;
     final date = DateTime(_month.year, _month.month, day);
-    if (s.isDemoAccount &&
-        (date.isBefore(DateTime(2026, 7, 1)) ||
-            date.isAfter(DateTime(2026, 9, 30)))) {
-      return null;
-    }
     final idx = date.difference(start).inDays;
-    return (idx >= 0 && idx < roster.length) ? idx : null;
+    return (idx >= 0 &&
+            idx < roster.length &&
+            !s.rosterMissingIndices.contains(idx))
+        ? idx
+        : null;
   }
 
   /// 화면에 그릴 코드 목록. 데이터가 하나도 없으면 null.
@@ -70,7 +69,7 @@ class _RosterCalendarScreenState extends State<RosterCalendarScreen> {
     for (var d = 1; d <= _daysInMonth; d++) {
       final idx = _rosterIndexFor(d);
       if (idx == null) {
-        out.add('O');
+        out.add('');
       } else {
         any = true;
         out.add(_codeOf[roster[idx]]!);

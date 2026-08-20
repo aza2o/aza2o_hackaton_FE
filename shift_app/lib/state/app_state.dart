@@ -338,6 +338,7 @@ class AppState extends ChangeNotifier {
   }
 
   List<ShiftType>? roster;
+  Set<int> rosterMissingIndices = {};
   // roster[0]이 어느 날짜인지 — 이게 없으면 "오늘이 로스터의 몇 번째
   // 인덱스인지" 계산할 수가 없다(nudge_service.dart가 실제로 이 값으로
   // todayIndex를 구한다). 이전엔 이 앵커가 없어서 항상 roster[0](=로스터
@@ -448,20 +449,14 @@ class AppState extends ChangeNotifier {
   /// [startDate]는 `roster[0]`이 해당하는 실제 날짜(자정 기준) — 보통
   /// 로스터를 확인한 달의 1일. 이게 있어야 "오늘"이 배열의 몇 번째
   /// 인덱스인지 계산할 수 있다.
-  void saveRoster(List<ShiftType> roster, {required DateTime startDate}) {
-    if (isDemoAccount) {
-      // 심사용 데모 계정은 서버/로컬에 과거 데이터가 남아 있어도
-      // 2026년 7~9월 범위를 절대 벗어나지 않는다.
-      this.roster = List.of(roster.take(92));
-      rosterStartDate = DateTime(2026, 7, 1);
-    } else {
-      this.roster = List.of(roster);
-      rosterStartDate = DateTime(
-        startDate.year,
-        startDate.month,
-        startDate.day,
-      );
-    }
+  void saveRoster(
+    List<ShiftType> roster, {
+    required DateTime startDate,
+    Set<int> missingIndices = const {},
+  }) {
+    this.roster = List.of(roster);
+    rosterMissingIndices = Set.of(missingIndices);
+    rosterStartDate = DateTime(startDate.year, startDate.month, startDate.day);
     _persist();
     notifyListeners();
   }
@@ -551,6 +546,8 @@ class AppState extends ChangeNotifier {
     if (aiCommentAt != null) 'aiCommentAt': aiCommentAt!.toIso8601String(),
     if (aiCommentFormat != null) 'aiCommentFormat': aiCommentFormat,
     if (roster != null) 'roster': [for (final s in roster!) s.name],
+    if (rosterMissingIndices.isNotEmpty)
+      'rosterMissingIndices': rosterMissingIndices.toList()..sort(),
     if (rosterStartDate != null)
       'rosterStartDate': rosterStartDate!.toIso8601String(),
     // 무한정 쌓이면 안 되니 최근 것만 — 홈은 가장 최근 1건만 쓴다.
@@ -627,6 +624,10 @@ class AppState extends ChangeNotifier {
     roster = savedRoster == null
         ? null
         : [for (final s in savedRoster) ShiftType.values.byName(s as String)];
+    rosterMissingIndices = {
+      for (final index in (json['rosterMissingIndices'] as List? ?? []))
+        index as int,
+    };
 
     final start = json['rosterStartDate'] as String?;
     rosterStartDate = start == null ? null : DateTime.parse(start);

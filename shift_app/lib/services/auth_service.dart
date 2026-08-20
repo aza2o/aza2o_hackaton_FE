@@ -15,6 +15,65 @@ const _supabasePublishableKey = String.fromEnvironment(
   defaultValue: 'sb_publishable_NHSYLKAag3fpz0noLFlbQg_KZacuPe2',
 );
 
+class DatedRoster {
+  const DatedRoster({
+    required this.startDate,
+    required this.shifts,
+    required this.missingIndices,
+  });
+
+  final DateTime startDate;
+  final List<ShiftType> shifts;
+  final Set<int> missingIndices;
+}
+
+/// 서버 응답 순서와 무관하게 각 `work_date`를 실제 달력 날짜에 배치한다.
+/// 같은 날짜가 중복되면 서버가 먼저 반환한 행을 유지하고, 빠진 날짜나
+/// 알 수 없는 근무 코드는 오프로 위조하지 않고 누락 인덱스로 기록한다.
+DatedRoster parseDatedRosterRows(Iterable<Map<String, dynamic>> rows) {
+  final byDate = <DateTime, ShiftType?>{};
+  for (final row in rows) {
+    final parsed = DateTime.parse(row['work_date'] as String);
+    final date = DateTime(parsed.year, parsed.month, parsed.day);
+    byDate.putIfAbsent(
+      date,
+      () => switch (row['shift_type'] as String?) {
+        'D' => ShiftType.day,
+        'E' => ShiftType.evening,
+        'N' => ShiftType.night,
+        'O' => ShiftType.off,
+        _ => null,
+      },
+    );
+  }
+  if (byDate.isEmpty) {
+    throw const FormatException('근무표 날짜 데이터가 비어 있습니다.');
+  }
+
+  final dates = byDate.keys.toList()..sort();
+  final startDate = dates.first;
+  final endDate = dates.last;
+  final length = endDate.difference(startDate).inDays + 1;
+  final shifts = List<ShiftType>.filled(length, ShiftType.off);
+  final missingIndices = <int>{
+    for (var index = 0; index < length; index++) index,
+  };
+
+  for (final entry in byDate.entries) {
+    final shift = entry.value;
+    if (shift == null) continue;
+    final index = entry.key.difference(startDate).inDays;
+    shifts[index] = shift;
+    missingIndices.remove(index);
+  }
+
+  return DatedRoster(
+    startDate: startDate,
+    shifts: shifts,
+    missingIndices: missingIndices,
+  );
+}
+
 class AuthProfile {
   const AuthProfile({
     required this.name,
@@ -289,8 +348,7 @@ class AuthService {
       rosterRows = await _client
           .from('roster_entries')
           .select('work_date, shift_type')
-          .eq('user_id', userId)
-          .order('work_date');
+          .eq('user_id', userId);
     } catch (_) {
       // 근무표 조회 실패는 로컬 7~9월 데모 시드로 복구한다.
     }
@@ -336,18 +394,12 @@ class AuthService {
             date.isBefore(DateTime(2026, 10, 1));
       }).toList();
       if (demoRosterRows.isNotEmpty) {
-        final firstDate = DateTime.parse(
-          demoRosterRows.first['work_date'] as String,
+        final datedRoster = parseDatedRosterRows(demoRosterRows);
+        AppState.instance.saveRoster(
+          datedRoster.shifts,
+          startDate: datedRoster.startDate,
+          missingIndices: datedRoster.missingIndices,
         );
-        AppState.instance.saveRoster([
-          for (final row in demoRosterRows)
-            switch (row['shift_type'] as String) {
-              'D' => ShiftType.day,
-              'E' => ShiftType.evening,
-              'N' => ShiftType.night,
-              _ => ShiftType.off,
-            },
-        ], startDate: firstDate);
       }
 
       AppState.instance.replaceSyncedHealthMetrics([

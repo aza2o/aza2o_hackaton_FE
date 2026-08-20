@@ -3,6 +3,7 @@
 // 편집 규칙이 두 곳에서 갈라지면 같은 근무가 화면마다 다른 색으로 보이게
 // 되므로 여기 한 곳에만 둔다.
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -43,12 +44,14 @@ class WeekdayHeader extends StatelessWidget {
         for (var i = 0; i < 7; i++)
           Expanded(
             child: Center(
-              child: Text(labels[i],
-                  style: AppTypography.caption02.copyWith(
-                    color: (i == 5 || i == 6)
-                        ? AppColors.textPlaceholder
-                        : AppColors.textTertiary,
-                  )),
+              child: Text(
+                labels[i],
+                style: AppTypography.caption02.copyWith(
+                  color: (i == 5 || i == 6)
+                      ? AppColors.textPlaceholder
+                      : AppColors.textTertiary,
+                ),
+              ),
             ),
           ),
       ],
@@ -94,28 +97,40 @@ class CalendarGrid extends StatelessWidget {
         final day = cellIdx - startOffset;
         if (day < 0 || day >= shifts.length) return const SizedBox.shrink();
         final shift = shifts[day];
+        final isMissing = shift.isEmpty;
         final isToday = day == highlightDay;
         return GestureDetector(
           onTap: onTapDay == null ? null : () => onTapDay!(day),
           child: Container(
             decoration: BoxDecoration(
-              color: shiftColor[shift],
+              color: isMissing ? Colors.transparent : shiftColor[shift],
               borderRadius: BorderRadius.circular(10),
               border: isToday
                   ? Border.all(color: AppColors.textPrimary, width: 2)
+                  : isMissing
+                  ? Border.all(color: AppColors.gray100)
                   : null,
             ),
             padding: const EdgeInsets.all(6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${day + 1}',
-                    style: AppTypography.caption02
-                        .copyWith(color: shiftTextColor[shift])),
+                Text(
+                  '${day + 1}',
+                  style: AppTypography.caption02.copyWith(
+                    color: isMissing
+                        ? AppColors.textPlaceholder
+                        : shiftTextColor[shift],
+                  ),
+                ),
                 const Spacer(),
-                Text(shift,
-                    style: AppTypography.subtitle03
-                        .copyWith(color: shiftTextColor[shift])),
+                if (!isMissing)
+                  Text(
+                    shift,
+                    style: AppTypography.subtitle03.copyWith(
+                      color: shiftTextColor[shift],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -140,13 +155,18 @@ class ShiftLegend extends StatelessWidget {
             Container(
               width: 10,
               height: 10,
-              decoration:
-                  BoxDecoration(color: shiftColor[code], shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: shiftColor[code],
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: 6),
-            Text('$code ${shiftLabel[code]}',
-                style: AppTypography.caption02
-                    .copyWith(color: AppColors.textTertiary)),
+            Text(
+              '$code ${shiftLabel[code]}',
+              style: AppTypography.caption02.copyWith(
+                color: AppColors.textTertiary,
+              ),
+            ),
           ],
         );
       }).toList(),
