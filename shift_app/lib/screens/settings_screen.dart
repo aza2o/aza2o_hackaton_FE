@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../state/app_state.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
@@ -26,15 +27,18 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   String get _healthPlatformName =>
       defaultTargetPlatform == TargetPlatform.android
-          ? 'Health Connect'
-          : 'Apple Health';
+      ? 'Health Connect'
+      : 'Apple Health';
 
   Future<void> _openWearableConnection() async {
     if (!AppState.instance.wearableConsent) {
       final agreed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text('$_healthPlatformName를 연결할까요?', style: AppTypography.subtitle02),
+          title: Text(
+            '$_healthPlatformName를 연결할까요?',
+            style: AppTypography.subtitle02,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,9 +91,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const WearableConnectionScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const WearableConnectionScreen()));
     if (mounted) setState(() {});
   }
 
@@ -99,6 +103,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ai: value,
     );
     setState(() {});
+    // 게스트도 AI 인사이트를 사용한다. 동의는 로컬에 저장하되 Supabase
+    // 세션이 없는 게스트에게 서버 프로필 업데이트를 요구하지 않는다.
+    if (!AuthService.isAuthenticated) return;
     try {
       await AuthService.updateConsent(
         privacyConsent: AppState.instance.privacyConsent,
@@ -134,7 +141,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: Text(
                 '그래도 로그아웃',
-                style: AppTypography.button03.copyWith(color: AppColors.error01),
+                style: AppTypography.button03.copyWith(
+                  color: AppColors.error01,
+                ),
               ),
             ),
           ],
@@ -167,15 +176,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(AppState.instance.userName ?? '게스트',
-                          style: AppTypography.subtitle02),
+                      Text(
+                        AppState.instance.userName ?? '게스트',
+                        style: AppTypography.subtitle02,
+                      ),
                       const SizedBox(height: 4),
-                      Text('3교대 간호사·무료 플랜',
-                          style: AppTypography.caption01
-                              .copyWith(color: AppColors.textTertiary)),
+                      Text(
+                        '3교대 간호사·무료 플랜',
+                        style: AppTypography.caption01.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
                     ],
                   ),
-                  const Icon(Icons.chevron_right, color: AppColors.textTertiary),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AppColors.textTertiary,
+                  ),
                 ],
               ),
             ),
@@ -187,12 +204,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const RosterUploadScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const RosterUploadScreen(),
+                      ),
                     ),
                     child: _SettingsRow(
-                        label: '근무표 관리', value: '', showChevron: true),
+                      label: '근무표 관리',
+                      value: '',
+                      showChevron: true,
+                    ),
                   ),
-                  const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                  const Divider(
+                    height: AppSpacing.xxl,
+                    color: AppColors.gray100,
+                  ),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _openWearableConnection,
@@ -202,7 +227,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       showChevron: true,
                     ),
                   ),
-                  const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                  const Divider(
+                    height: AppSpacing.xxl,
+                    color: AppColors.gray100,
+                  ),
                   _SettingsRow(label: '구독 서비스', value: '무료 플랜'),
                 ],
               ),
@@ -213,7 +241,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   _SettingsToggleRow(label: '행동 알림', value: true),
-                  const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                  const Divider(
+                    height: AppSpacing.xxl,
+                    color: AppColors.gray100,
+                  ),
                   _SettingsToggleRow(label: '주간 리포트 알림', value: false),
                 ],
               ),
@@ -233,9 +264,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           children: [
                             Text('AI 인사이트 사용', style: AppTypography.body02),
                             const SizedBox(height: 2),
-                            Text('근무·수면 요약이 Google(Gemini)로 전송돼요',
-                                style: AppTypography.caption02
-                                    .copyWith(color: AppColors.textTertiary)),
+                            Text(
+                              '근무·수면 요약이 Google(Gemini)로 전송돼요',
+                              style: AppTypography.caption02.copyWith(
+                                color: AppColors.textTertiary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -245,14 +279,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
-                  const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                  const Divider(
+                    height: AppSpacing.xxl,
+                    color: AppColors.gray100,
+                  ),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
                     ),
                     child: _SettingsRow(
-                        label: '개인정보 처리방침', value: '', showChevron: true),
+                      label: '개인정보 처리방침',
+                      value: '',
+                      showChevron: true,
+                    ),
                   ),
                 ],
               ),
@@ -263,14 +305,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   _SettingsRow(label: '문의 및 도움말', value: '', showChevron: true),
-                  const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                  const Divider(
+                    height: AppSpacing.xxl,
+                    color: AppColors.gray100,
+                  ),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _handleSignOut,
                     child: Row(
                       children: [
-                        Text('로그아웃',
-                            style: AppTypography.body02.copyWith(color: AppColors.error01)),
+                        Text(
+                          '로그아웃',
+                          style: AppTypography.body02.copyWith(
+                            color: AppColors.error01,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -316,15 +365,24 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: AppSpacing.sm),
-      child: Text(label,
-          style: AppTypography.subtitle04.copyWith(color: AppColors.textTertiary)),
+      padding: const EdgeInsets.only(
+        bottom: AppSpacing.sm,
+        left: AppSpacing.sm,
+      ),
+      child: Text(
+        label,
+        style: AppTypography.subtitle04.copyWith(color: AppColors.textTertiary),
+      ),
     );
   }
 }
 
 class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({required this.label, required this.value, this.showChevron = false});
+  const _SettingsRow({
+    required this.label,
+    required this.value,
+    this.showChevron = false,
+  });
   final String label;
   final String value;
   final bool showChevron;
@@ -338,12 +396,19 @@ class _SettingsRow extends StatelessWidget {
         Row(
           children: [
             if (value.isNotEmpty)
-              Text(value,
-                  style: AppTypography.body02
-                      .copyWith(color: AppColors.textTertiary)),
+              Text(
+                value,
+                style: AppTypography.body02.copyWith(
+                  color: AppColors.textTertiary,
+                ),
+              ),
             if (showChevron || value.isNotEmpty) ...[
               const SizedBox(width: 4),
-              const Icon(Icons.chevron_right, size: 18, color: AppColors.textTertiary),
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.textTertiary,
+              ),
             ],
           ],
         ),

@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 const _supabaseUrl = 'https://fthdvkrufjolrfuopvma.supabase.co';
 const _supabasePublishableKey = String.fromEnvironment(
   'SUPABASE_PUBLISHABLE_KEY',
+  defaultValue: 'sb_publishable_NHSYLKAag3fpz0noLFlbQg_KZacuPe2',
 );
 
 class AuthProfile {
@@ -46,6 +47,7 @@ class AuthService {
 
   static bool _initialized = false;
   static bool get isConfigured => _supabasePublishableKey.isNotEmpty;
+  static String get publishableKey => _supabasePublishableKey;
   static bool get isAuthenticated =>
       AppState.instance.isDemoAccount ||
       (_initialized && Supabase.instance.client.auth.currentSession != null);

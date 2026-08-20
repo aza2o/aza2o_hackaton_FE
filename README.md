@@ -166,6 +166,10 @@ sb_publishable_NHSYLKAag3fpz0noLFlbQg_KZacuPe2
 
 `service_role`/secret key는 모바일 앱에 절대 넣지 않습니다.
 
+위 publishable key는 공개 클라이언트용이므로 앱의 기본 빌드에도 포함되어
+있습니다. 다른 Supabase 프로젝트로 바꿀 때만 아래 `--dart-define`으로
+덮어쓰면 됩니다.
+
 ```bash
 flutter run \
   --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_NHSYLKAag3fpz0noLFlbQg_KZacuPe2

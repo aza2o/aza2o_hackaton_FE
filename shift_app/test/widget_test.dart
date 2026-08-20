@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shift_app/main.dart';
 import 'package:shift_app/screens/login_screen.dart';
@@ -13,7 +14,10 @@ import 'package:shift_app/screens/settings_screen.dart';
 import 'package:shift_app/state/app_state.dart';
 
 void main() {
-  setUp(() => AppState.instance.signOut()); // 테스트 간 싱글턴 상태 격리
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    AppState.instance.signOut();
+  }); // 테스트 간 싱글턴 상태 격리
 
   testWidgets('앱 최초 실행 → 회원가입·온보딩·권한·로스터 확인을 거쳐 홈까지 도달하면, '
       '가입 때 입력한 이름이 홈·설정 화면에 그대로 뜬다', (WidgetTester tester) async {

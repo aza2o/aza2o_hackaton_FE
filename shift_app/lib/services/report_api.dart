@@ -14,6 +14,7 @@ import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
 
 import '../engine/gap_service.dart';
+import 'auth_service.dart';
 import '../state/app_state.dart';
 
 // 2026-08-20: 원래 프로젝트(zfwmwplxezqtxxbgmieb) 오너 초대가 막혀서 새
@@ -268,7 +269,11 @@ Future<AiReportResult> fetchAiReport({
 
   final res = await http.post(
     Uri.parse(_reportUrl),
-    headers: {'Content-Type': 'application/json'},
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': AuthService.publishableKey,
+      'Authorization': 'Bearer ${AuthService.publishableKey}',
+    },
     body: jsonEncode({
       'gapMinutes': gapMinutes,
       'sleepDebtMin': sleepDebtMin,
