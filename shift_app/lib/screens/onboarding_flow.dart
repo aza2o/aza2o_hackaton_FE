@@ -77,6 +77,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         shiftTimings: _shiftTimings,
         workplaceLighting: _workplaceLighting,
         bedroomLighting: _bedroomLighting,
+        chronotype: _chronotype,
+        caffeineCutoff: _caffeineCutoff,
       );
       Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PermissionScreen()));
