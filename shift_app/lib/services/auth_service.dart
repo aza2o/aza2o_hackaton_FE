@@ -43,7 +43,6 @@ class AuthService {
   AuthService._();
 
   static const demoAccountId = 'demo@sleepready.app';
-  static const demoAccountPassword = 'SleepReady26!';
 
   static bool _initialized = false;
   static bool get isConfigured => _supabasePublishableKey.isNotEmpty;
@@ -106,21 +105,6 @@ class AuthService {
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-    if (normalizedEmail == demoAccountId && password != demoAccountPassword) {
-      throw const AuthException('테스트 계정 비밀번호가 일치하지 않아요.');
-    }
-    if (normalizedEmail == demoAccountId && !isConfigured) {
-      await AppState.instance.seedDemoAccount();
-      return const AuthProfile(
-        name: '슬립레디 데모',
-        email: demoAccountId,
-        privacyConsent: true,
-        aiConsent: true,
-        skinType: 'combination',
-        skinConcerns: ['턱 트러블', '속건조', '칙칙함'],
-        skinSensitivities: ['향료', '반복 세안'],
-      );
-    }
     final response = await _client.auth.signInWithPassword(
       email: normalizedEmail,
       password: password,
