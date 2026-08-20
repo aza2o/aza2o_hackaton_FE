@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
 
 import '../engine/alertness_service.dart';
 import '../engine/gap_service.dart';
@@ -122,6 +123,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late Future<void> _healthSyncFuture;
   late Future<TodayNudges> _future;
   late Future<AlertnessResult> _alertFuture;
   late Future<List<SleepDurationDay>> _sleepDurationFuture;
@@ -143,10 +145,25 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _future = loadTodayNudges();
+    _healthSyncFuture = _syncHealthData();
+    _future = _healthSyncFuture.then((_) => loadTodayNudges());
     _alertFuture = loadAlertness();
-    _sleepDurationFuture = _loadSleepDurationDays();
-    _recoveryFuture = _loadRecovery(_healthSource);
+    _sleepDurationFuture = _healthSyncFuture.then(
+      (_) => _loadSleepDurationDays(),
+    );
+    _recoveryFuture = _healthSyncFuture.then(
+      (_) => _loadRecovery(_healthSource),
+    );
+  }
+
+  Future<void> _syncHealthData() async {
+    final state = AppState.instance;
+    if (state.isDemoAccount || !state.wearableConsent) return;
+    try {
+      await syncHealthMetrics(_healthSource);
+    } catch (_) {
+      // 선택 데이터 동기화 실패는 근무표 기반 홈 진입을 막지 않는다.
+    }
   }
 
   Future<List<SleepDurationDay>> _loadSleepDurationDays() async {
@@ -154,20 +171,30 @@ class _HomeScreenState extends State<HomeScreen> {
     if (AppState.instance.isDemoAccount) {
       return sleepDurationSeries(roster: rhythm.roster);
     }
-    final end = DateTime.now();
-    final start = end.subtract(const Duration(days: 15));
-    final sessions = await _healthSource.sleepSessions(DateRange(start, end));
-    if (sessions.length < minimumSleepRecordsForInsight) return const [];
-    sessions.sort((a, b) => a.end.compareTo(b.end));
-    final recent = sessions.length <= 14
-        ? sessions
-        : sessions.sublist(sessions.length - 14);
+    final metrics = List<SyncedHealthMetric>.of(
+      AppState.instance.syncedHealthMetrics,
+    )..sort((a, b) => a.date.compareTo(b.date));
+    if (metrics.length < minimumSleepRecordsForInsight) return const [];
+    final recent = metrics.length <= 14
+        ? metrics
+        : metrics.sublist(metrics.length - 14);
+    final anchor = AppState.instance.rosterStartDate ?? rhythm.startDate;
+    final matchedShifts = <ShiftType>[];
+    final actualMinutes = <int>[];
+    for (final metric in recent) {
+      final index = DateTime(
+        metric.date.year,
+        metric.date.month,
+        metric.date.day,
+      ).difference(anchor).inDays;
+      if (index < 0 || index >= rhythm.roster.length) continue;
+      matchedShifts.add(rhythm.roster[index]);
+      actualMinutes.add(metric.sleepMinutes);
+    }
+    if (actualMinutes.length < minimumSleepRecordsForInsight) return const [];
     return sleepDurationSeriesWithActualMinutes(
-      roster: rhythm.roster.take(recent.length).toList(),
-      actualMinutes: [
-        for (final session in recent)
-          session.end.difference(session.start).inMinutes,
-      ],
+      roster: matchedShifts,
+      actualMinutes: actualMinutes,
     );
   }
 

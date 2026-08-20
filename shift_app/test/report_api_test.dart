@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_app/services/report_api.dart';
+import 'package:shift_app/engine/nudge_service.dart';
 import 'package:shift_app/state/app_state.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
 
@@ -51,5 +52,33 @@ void main() {
 
     expect(state.aiComment, isNull);
     expect(state.syncedHealthMetrics, isEmpty);
+  });
+
+  test('넛지용 수면 세션은 일반 계정의 실제 동기화 기록을 사용한다', () {
+    final state = AppState.instance;
+    state.signOut();
+    state.setAuthenticatedUser(name: '사용자', email: 'watch@example.com');
+    final anchor = DateTime(2026, 8, 1);
+    state.replaceSyncedHealthMetrics([
+      for (var day = 1; day <= 3; day++)
+        SyncedHealthMetric(
+          date: DateTime(2026, 8, day),
+          sleepStart: DateTime(2026, 8, day, 1),
+          sleepEnd: DateTime(2026, 8, day, 7),
+          sleepMinutes: 360,
+          hrvZ: null,
+          restingHeartRate: null,
+          source: 'health_connect',
+        ),
+    ]);
+
+    final sessions = sleepSessionsForNudges(
+      app: state,
+      anchor: anchor,
+      todayIndex: 2,
+    );
+
+    expect(sessions, hasLength(3));
+    expect(sessions.first.endAt - sessions.first.startAt, 6);
   });
 }

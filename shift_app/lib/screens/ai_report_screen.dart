@@ -39,20 +39,24 @@ class _ActogramData {
 }
 
 /// [AlertnessResult]를 이중 플롯(0~48h) 액토그램 행으로 변환한다. 세그먼트
-/// 탭(주간/월간/근무루틴별)은 아직 실제 필터링에 안 이어져 있어(TODO),
-/// 지금은 로스터 앞 7일만 보여준다.
+/// 탭별 기간은 로스터 첫날이 아니라 실제 오늘을 끝점으로 잡는다.
 ///
 /// 목표 취침(`idealSleepTimes`)은 실제 수면 이력이 아니라 [r.sleep](근무표
 /// 기반 예측 수면)을 폴백 이력으로 재사용한다 — 아직 헬스 연동 전이라
 /// `report_api.dart`의 데모 세션과 마찬가지로 근사치다.
-_ActogramData _buildRows(AlertnessResult r, int segment) {
-  final limit = segment == 0 ? 7 : 14;
-  final allIndices = List<int>.generate(
-    r.roster.length < limit ? r.roster.length : limit,
-    (i) => i,
-  );
+_ActogramData _buildRows(AlertnessResult r, int segment, {DateTime? now}) {
+  final current = now ?? DateTime.now();
+  final today = DateTime(current.year, current.month, current.day);
+  final rawTodayIndex = today.difference(r.startDate).inDays;
+    final todayIndex = rawTodayIndex.clamp(0, r.roster.length - 1).toInt();
+  final lookback = segment == 0 ? 7 : segment == 1 ? 14 : 21;
+    final startIndex =
+        (todayIndex - lookback + 1).clamp(0, todayIndex).toInt();
+  final allIndices = [
+    for (var i = startIndex; i <= todayIndex; i++) i,
+  ];
   final indices = segment == 2
-      ? allIndices.where((i) => r.roster[i] != ShiftType.off).take(8).toList()
+      ? allIndices.where((i) => r.roster[i] != ShiftType.off).toList().reversed.take(8).toList().reversed.toList()
       : allIndices;
   final rows = <ActogramRow>[];
   final sleepAbs = [for (final w in r.sleep) (w.start, w.end)];

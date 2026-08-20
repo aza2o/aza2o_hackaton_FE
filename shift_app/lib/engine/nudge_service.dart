@@ -5,11 +5,13 @@
 // 여는 위젯 테스트) 데모 로스터로 대체한다 — 워치 수면 이력은 헬스 연동
 // 전까지 항상 데모값을 쓴다(`docs/SHIFT_프론트엔드_구현체크리스트.md` §1).
 import 'dart:convert';
+
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/nudge/nudge_constants.dart';
 import 'package:shift_circadian_engine/nudge/nudge_messages.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
+
 import '../state/app_state.dart';
 
 /// 화면이 그대로 그릴 수 있게 추린 결과.
@@ -30,7 +32,12 @@ class TodayNudges {
 }
 
 class NudgeAction {
-  const NudgeAction({required this.time, required this.label, required this.message, required this.isPast});
+  const NudgeAction({
+    required this.time,
+    required this.label,
+    required this.message,
+    required this.isPast,
+  });
   final String time; // 예: "22:00"
   final String label; // 예: "조명 낮추기"
   final String message;
@@ -71,7 +78,19 @@ String _formatClock(double absHours) {
 /// 로스터·홈 연동이 깨졌었다.
 List<SleepSession> _demoRecentSessions(int todayIndex) {
   final base = todayIndex * 24.0;
-  const starts = [23.3, 24.1, 23.7, 8.6, 9.1, 24.4, 23.2, 23.8, 24.0, 23.5, 23.4];
+  const starts = [
+    23.3,
+    24.1,
+    23.7,
+    8.6,
+    9.1,
+    24.4,
+    23.2,
+    23.8,
+    24.0,
+    23.5,
+    23.4,
+  ];
   const durations = [6.9, 6.3, 7.2, 5.9, 6.5, 6.7, 7.1, 6.2, 6.8, 7.0, 6.6];
   return [
     for (var d = -10; d <= 0; d++)
@@ -82,10 +101,42 @@ List<SleepSession> _demoRecentSessions(int todayIndex) {
   ];
 }
 
+/// 저장된 실제 Watch 수면을 엔진의 로스터 기준 절대시간으로 변환한다.
+/// 실제 기록이 부족한 일반 계정에는 수면 부채를 만들지 않는 중립 기준선을
+/// 사용하고, 목업 수면은 심사용 데모 계정에서만 허용한다.
+List<SleepSession> sleepSessionsForNudges({
+  required AppState app,
+  required DateTime anchor,
+  required int todayIndex,
+}) {
+  if (app.isDemoAccount) return _demoRecentSessions(todayIndex);
+  final metrics = List<SyncedHealthMetric>.of(app.syncedHealthMetrics)
+    ..sort((a, b) => a.sleepStart.compareTo(b.sleepStart));
+  if (metrics.length >= 3) {
+    return [
+      for (final metric in metrics)
+        SleepSession(
+          metric.sleepStart.difference(anchor).inMinutes / 60.0,
+          metric.sleepEnd.difference(anchor).inMinutes / 60.0,
+        ),
+    ];
+  }
+  final base = todayIndex * 24.0;
+  return [
+    for (var day = -7; day <= 0; day++)
+      SleepSession(base + day * 24.0 + 23.5, base + day * 24.0 + 31.0),
+  ];
+}
+
 /// `AppState.roster`가 비어 있을 때(첫 실행 전, 단독 위젯 테스트)만 쓰는 폴백.
 const _demoRoster = [
-  ShiftType.day, ShiftType.day, ShiftType.evening,
-  ShiftType.night, ShiftType.night, ShiftType.off, ShiftType.off,
+  ShiftType.day,
+  ShiftType.day,
+  ShiftType.evening,
+  ShiftType.night,
+  ShiftType.night,
+  ShiftType.off,
+  ShiftType.off,
 ];
 
 Map<String, String>? _catalogCache;
@@ -132,7 +183,13 @@ Future<TodayNudges> loadTodayNudges() async {
     todayIndex = 0;
   }
   final now = todayIndex * 24.0 + wallClock.hour + wallClock.minute / 60.0;
-  final sessions = _demoRecentSessions(todayIndex);
+  final sessionAnchor =
+      anchor ?? DateTime(wallClock.year, wallClock.month, wallClock.day);
+  final sessions = sleepSessionsForNudges(
+    app: app,
+    anchor: sessionAnchor,
+    todayIndex: todayIndex,
+  );
 
   final plan = buildNudgePlan(
     roster: roster,
@@ -143,7 +200,8 @@ Future<TodayNudges> loadTodayNudges() async {
   );
 
   final todayShift = roster[todayIndex];
-  final isNightMood = todayShift == ShiftType.evening || todayShift == ShiftType.night;
+  final isNightMood =
+      todayShift == ShiftType.evening || todayShift == ShiftType.night;
   final debt = computeSleepDebtMin(sessions, now);
   final highDebt = debt >= napLongDebtThresholdMin;
   final shiftTimings = profile?.shiftTimings ?? defaultShiftTimings;
@@ -151,7 +209,7 @@ Future<TodayNudges> loadTodayNudges() async {
   final headerLabel = todayShift == ShiftType.off
       ? '오늘은 오프예요'
       : '오늘 ${_formatClock(shiftTimings[todayShift]!.start)} '
-          '${_shiftLabel[todayShift]} 근무';
+            '${_shiftLabel[todayShift]} 근무';
 
   final planLabel = plan.sleep.type == PlanType.nap
       ? '${_formatClock(plan.sleep.napStart!)} 낮잠'
@@ -159,8 +217,11 @@ Future<TodayNudges> loadTodayNudges() async {
 
   final actions = plan.nudges.map((n) {
     final message = resolveNudgeMessage(
-      catalog, n.kind, todayShift,
-      highDebt: highDebt, dayIndex: (n.at / 24.0).floor(),
+      catalog,
+      n.kind,
+      todayShift,
+      highDebt: highDebt,
+      dayIndex: (n.at / 24.0).floor(),
     );
     return NudgeAction(
       time: _formatClock(n.at),
@@ -182,7 +243,11 @@ Future<TodayNudges> loadTodayNudges() async {
 /// 로컬 알림으로 예약할 넛지 하나 — [at]은 로스터 시작일 기준 절대시간(h)이
 /// 아니라 실제 달력 시각(DateTime)으로 이미 변환돼 있다.
 class ScheduledNudge {
-  const ScheduledNudge({required this.at, required this.title, required this.body});
+  const ScheduledNudge({
+    required this.at,
+    required this.title,
+    required this.body,
+  });
   final DateTime at;
   final String title;
   final String body;
@@ -207,8 +272,13 @@ Future<List<ScheduledNudge>> loadUpcomingNudgeTriggers({int days = 2}) async {
   final profile = app.hasProfile ? app.toUserProfile() : null;
   final todayIndex = diff;
   final now = todayIndex * 24.0 + wallClock.hour + wallClock.minute / 60.0;
-  final sessions = _demoRecentSessions(todayIndex);
-  final highDebt = computeSleepDebtMin(sessions, now) >= napLongDebtThresholdMin;
+  final sessions = sleepSessionsForNudges(
+    app: app,
+    anchor: anchor,
+    todayIndex: todayIndex,
+  );
+  final highDebt =
+      computeSleepDebtMin(sessions, now) >= napLongDebtThresholdMin;
 
   final triggers = <ScheduledNudge>[];
   for (var offset = 0; offset < days; offset++) {
@@ -226,14 +296,19 @@ Future<List<ScheduledNudge>> loadUpcomingNudgeTriggers({int days = 2}) async {
 
     for (final n in plan.nudges) {
       final message = resolveNudgeMessage(
-        catalog, n.kind, shift,
-        highDebt: highDebt, dayIndex: (n.at / 24.0).floor(),
+        catalog,
+        n.kind,
+        shift,
+        highDebt: highDebt,
+        dayIndex: (n.at / 24.0).floor(),
       );
-      triggers.add(ScheduledNudge(
-        at: anchor.add(Duration(minutes: (n.at * 60).round())),
-        title: _kindLabel[n.kind]!,
-        body: message,
-      ));
+      triggers.add(
+        ScheduledNudge(
+          at: anchor.add(Duration(minutes: (n.at * 60).round())),
+          title: _kindLabel[n.kind]!,
+          body: message,
+        ),
+      );
     }
   }
   return triggers;

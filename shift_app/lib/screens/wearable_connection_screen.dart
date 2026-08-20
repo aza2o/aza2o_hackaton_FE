@@ -38,25 +38,11 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
           : _isAndroid
           ? AndroidHealthSource()
           : IosHealthSource();
-      final authorized = await source.requestAuthorization();
-      if (!authorized) {
-        throw const FormatException('건강 데이터 읽기 권한이 필요해요.');
-      }
-
-      final now = DateTime.now();
-      final range = DateRange(now.subtract(const Duration(days: 14)), now);
-      final results = await Future.wait<Object?>([
-        source.sleepSessions(range),
-        source.hrvNormalized(range),
-        source.restingHeartRate(range),
-      ]);
-      final sessions = results[0] as List<HealthSleepSession>;
-      final hrv = results[1] as HrvSeries?;
-      final heartRate = results[2] as HeartRateSeries?;
-      final hasMeasuredData =
-          sessions.isNotEmpty ||
-          hrv?.points.isNotEmpty == true ||
-          heartRate?.points.isNotEmpty == true;
+      final metrics = await syncHealthMetrics(
+        source,
+        requestAuthorization: true,
+      );
+      final hasMeasuredData = metrics.isNotEmpty;
 
       if (!mounted) return;
       setState(() {
@@ -64,16 +50,16 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
         _connected = true;
         _usingDemo = !hasMeasuredData;
         _lastSync = DateTime.now();
-        if (sessions.isNotEmpty) {
-          final latest = sessions.last;
-          final minutes = latest.end.difference(latest.start).inMinutes;
-          _sleepValue = '${minutes ~/ 60}h ${minutes % 60}m';
-        }
-        if (hrv?.points.isNotEmpty == true) {
-          _hrvValue = '${hrv!.points.last.$2.toStringAsFixed(1)}σ';
-        }
-        if (heartRate?.points.isNotEmpty == true) {
-          _heartRateValue = '${heartRate!.points.last.$2.round()}bpm';
+        if (metrics.isNotEmpty) {
+          final latest = metrics.last;
+          _sleepValue =
+              '${latest.sleepMinutes ~/ 60}h ${latest.sleepMinutes % 60}m';
+          if (latest.hrvZ != null) {
+            _hrvValue = '${latest.hrvZ!.toStringAsFixed(1)}σ';
+          }
+          if (latest.restingHeartRate != null) {
+            _heartRateValue = '${latest.restingHeartRate!.round()}bpm';
+          }
         }
       });
       ScaffoldMessenger.of(context).showSnackBar(

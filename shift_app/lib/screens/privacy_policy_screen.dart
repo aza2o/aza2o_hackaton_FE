@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -23,40 +24,52 @@ class PrivacyPolicyScreen extends StatelessWidget {
           children: const [
             _Section(
               title: '1. 수집하는 정보',
-              body: '• 계정: 이름, 이메일\n'
+              body:
+                  '• 계정: 이름, 이메일\n'
                   '• 근무: 근무표(날짜별 D/E/N/O), 근무 시각\n'
                   '• 생활: 조명 환경, 크로노타입, 카페인 습관, 취침 기록\n'
                   '• 건강(선택): 수면·심박·HRV 등 HealthKit/Health Connect 데이터',
             ),
             _Section(
               title: '2. 이용 목적',
-              body: '일주기 리듬(DLMO)과 수면압력을 계산해 개인화된 취침 '
+              body:
+                  '일주기 리듬(DLMO)과 수면압력을 계산해 개인화된 취침 '
                   '타이밍과 넛지 알림을 제공하기 위해서만 사용합니다.',
             ),
             _Section(
               title: '3. 보관 위치와 기간',
-              body: '계정·근무·생활 정보는 기기 안에만 저장되며, 앱을 삭제하거나 '
-                  '로그아웃하면 함께 삭제됩니다. 비밀번호는 저장하지 않습니다.',
+              body:
+                  '이름, 이메일, 동의 내역, 피부 프로필과 사용자가 입력한 상태·고민은 '
+                  '계정 복원과 개인화를 위해 Supabase에 저장됩니다. 근무표, 온보딩 설정, '
+                  '수동 취침·기상 기록과 동기화된 건강 요약은 현재 기기에 저장됩니다. '
+                  '비밀번호는 앱이 저장하지 않고 Supabase Auth가 관리합니다. 서버 정보는 '
+                  '삭제 요청과 운영 정책에 따라 제거되며, 기기 정보는 로그아웃 또는 앱 삭제 시 제거됩니다.',
             ),
             _Section(
               title: '4. 제3자 제공 및 국외 이전',
-              body: 'AI 리포트를 열 때에 한해 아래 정보가 외부로 전송됩니다.\n\n'
+              body:
+                  'AI 리포트를 열 때에 한해 아래 정보가 외부로 전송됩니다.\n\n'
                   '• 받는 곳: Google(Gemini API) — 미국 등 국외 서버\n'
                   '• 보내는 항목: 최근 2주 취침 격차(분), 수면 부채(분), '
                   '근무 패턴(D/E/N/O), 사용자가 직접 입력한 컨디션 메모\n'
                   '• 보내지 않는 항목: 이름, 이메일, 비밀번호\n'
                   '• 목적: 리포트 문구 생성\n\n'
+                  '계정 인증과 프로필·상태 기록 저장에는 Supabase가 사용됩니다. '
+                  '웨어러블 원본 데이터는 Supabase로 전송하지 않고 기기에서 날짜별 '
+                  '수면시간·HRV·안정심박 요약으로만 보관합니다.\n\n'
                   '근무표 파일을 올릴 때에는 파일이 근무표 파싱 서버로 전송되며, '
                   '파싱 후 저장하지 않습니다.',
             ),
             _Section(
               title: '5. 동의를 거부할 권리',
-              body: '동의하지 않아도 앱의 계산·넛지 기능은 사용할 수 있습니다. '
+              body:
+                  '동의하지 않아도 앱의 계산·넛지 기능은 사용할 수 있습니다. '
                   '다만 AI 리포트는 외부 전송이 필요해 이용할 수 없습니다.',
             ),
             _Section(
               title: '6. 의료 자문이 아님',
-              body: '슬립레디가 제공하는 취침 타이밍과 넛지는 참고용 정보이며 '
+              body:
+                  '슬립레디가 제공하는 취침 타이밍과 넛지는 참고용 정보이며 '
                   '의학적 진단·처방이 아닙니다. 수면 문제가 지속되면 '
                   '전문의와 상담하세요.',
             ),
@@ -81,9 +94,13 @@ class _Section extends StatelessWidget {
         children: [
           Text(title, style: AppTypography.subtitle03),
           const SizedBox(height: AppSpacing.xs),
-          Text(body,
-              style: AppTypography.body02
-                  .copyWith(color: AppColors.textSecondary, height: 1.6)),
+          Text(
+            body,
+            style: AppTypography.body02.copyWith(
+              color: AppColors.textSecondary,
+              height: 1.6,
+            ),
+          ),
         ],
       ),
     );

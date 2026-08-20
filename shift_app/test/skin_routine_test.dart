@@ -39,4 +39,37 @@ void main() {
     expect(result.roster, isNotEmpty);
     expect(routine, isNotNull);
   });
+
+  test('일반 계정 피부 회복 모드는 저장된 실제 수면 부족을 사용한다', () async {
+    SharedPreferences.setMockInitialValues({});
+    AppState.instance.signOut();
+    AppState.instance.setAuthenticatedUser(
+      name: '실사용자',
+      email: 'real@example.com',
+    );
+    final start = DateTime(2026, 8, 1);
+    AppState.instance.saveRoster(
+      List<ShiftType>.filled(31, ShiftType.day),
+      startDate: start,
+    );
+    AppState.instance.replaceSyncedHealthMetrics([
+      for (var day = 18; day <= 20; day++)
+        SyncedHealthMetric(
+          date: DateTime(2026, 8, day),
+          sleepStart: DateTime(2026, 8, day - 1, 23),
+          sleepEnd: DateTime(2026, 8, day, 5),
+          sleepMinutes: 360,
+          hrvZ: -0.2,
+          restingHeartRate: 64,
+          source: 'test_watch',
+        ),
+    ]);
+
+    final result = await loadAlertness();
+    final routine = skinRoutineFrom(result, now: DateTime(2026, 8, 21));
+
+    expect(routine, isNotNull);
+    expect(routine!.isRecoveryMode, isTrue);
+    expect(routine.todayDeficitMinutes, greaterThanOrEqualTo(60));
+  });
 }

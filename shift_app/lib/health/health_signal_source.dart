@@ -76,6 +76,54 @@ abstract class HealthSignalSource {
   Future<HeartRateSeries?> restingHeartRate(DateRange range);
 }
 
+/// 플랫폼 건강 데이터를 날짜별 한 행으로 합쳐 앱의 공통 저장소에 넣는다.
+/// 이후 넛지·그래프·AI·피부 루틴은 모두 이 동일한 데이터를 읽는다.
+Future<List<SyncedHealthMetric>> syncHealthMetrics(
+  HealthSignalSource source, {
+  int days = 14,
+  bool requestAuthorization = false,
+}) async {
+  if (requestAuthorization && !await source.requestAuthorization()) {
+    return const [];
+  }
+  final end = DateTime.now();
+  final range = DateRange(end.subtract(Duration(days: days + 1)), end);
+  final results = await Future.wait<Object?>([
+    source.sleepSessions(range),
+    source.hrvNormalized(range),
+    source.restingHeartRate(range),
+  ]);
+  final sessions = results[0] as List<HealthSleepSession>;
+  final hrv = results[1] as HrvSeries?;
+  final heartRate = results[2] as HeartRateSeries?;
+
+  String dayKey(DateTime value) =>
+      '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+  final hrvByDay = <String, double>{
+    for (final point in hrv?.points ?? const <(DateTime, double)>[])
+      dayKey(point.$1): point.$2,
+  };
+  final heartRateByDay = <String, double>{
+    for (final point in heartRate?.points ?? const <(DateTime, double)>[])
+      dayKey(point.$1): point.$2,
+  };
+  sessions.sort((a, b) => a.end.compareTo(b.end));
+  final metrics = [
+    for (final session in sessions)
+      SyncedHealthMetric(
+        date: DateTime(session.end.year, session.end.month, session.end.day),
+        sleepStart: session.start,
+        sleepEnd: session.end,
+        sleepMinutes: session.end.difference(session.start).inMinutes,
+        hrvZ: hrvByDay[dayKey(session.end)],
+        restingHeartRate: heartRateByDay[dayKey(session.end)],
+        source: source.runtimeType.toString(),
+      ),
+  ];
+  AppState.instance.replaceSyncedHealthMetrics(metrics);
+  return metrics;
+}
+
 /// 실기기 연동 전까지 쓰는 데모 구현. [hasData]를 false로 두면 온보딩의
 /// "최근 7일치 데이터 없음" 안내 분기를 그대로 재현할 수 있다.
 class DemoHealthSource implements HealthSignalSource {

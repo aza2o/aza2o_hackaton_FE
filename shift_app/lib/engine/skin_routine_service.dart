@@ -9,6 +9,7 @@ import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
 
 import 'alertness_service.dart';
 import 'gap_service.dart';
+import '../state/app_state.dart';
 
 class SkinRoutine {
   const SkinRoutine({
@@ -101,13 +102,37 @@ SkinRoutine? skinRoutineFrom(AlertnessResult r, {DateTime? now}) {
       .sublist(dayIndex, windowEnd)
       .where((s) => s == ShiftType.night)
       .length;
-  final sleepDay = sleepDurationSeries(
-    roster: r.roster,
-    windowDays: dayIndex + 1,
-  )[dayIndex];
-  final todayDeficitMinutes = sleepDay.deficitMinutes > 0
-      ? sleepDay.deficitMinutes
-      : 0;
+  final app = AppState.instance;
+  var todayDeficitMinutes = 0;
+  if (app.isDemoAccount) {
+    final sleepDay = sleepDurationSeries(
+      roster: r.roster,
+      windowDays: dayIndex + 1,
+    )[dayIndex];
+    todayDeficitMinutes = sleepDay.deficitMinutes.clamp(0, 24 * 60).toInt();
+  } else {
+    final metrics = List<SyncedHealthMetric>.of(app.syncedHealthMetrics)
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final matchedShifts = <ShiftType>[];
+    final actualMinutes = <int>[];
+    for (final metric in metrics) {
+      final index = DateTime(
+        metric.date.year,
+        metric.date.month,
+        metric.date.day,
+      ).difference(r.startDate).inDays;
+      if (index < 0 || index >= r.roster.length) continue;
+      matchedShifts.add(r.roster[index]);
+      actualMinutes.add(metric.sleepMinutes);
+    }
+    if (actualMinutes.length >= 3) {
+      final days = sleepDurationSeriesWithActualMinutes(
+        roster: matchedShifts,
+        actualMinutes: actualMinutes,
+      );
+      todayDeficitMinutes = days.last.deficitMinutes.clamp(0, 24 * 60).toInt();
+    }
+  }
   final fallbackSleep = switch (shift) {
     ShiftType.day => (dayStart + 22.5, dayStart + 30.5),
     ShiftType.evening => (dayStart + 24.5, dayStart + 32.5),

@@ -163,7 +163,15 @@ void main() {
       ),
     );
     expect(find.text('벽시계의 AM·PM 대신, 내 근무와 수면에 맞춘 생체 루틴'), findsOneWidget);
-    expect(find.textContaining('점'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.data != null &&
+            RegExp(r'\d+점').hasMatch(widget.data!),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('홈 헤더 설정 아이콘 → 설정 화면으로 이동', (tester) async {
