@@ -27,4 +27,16 @@ void main() {
     expect(routine!.wakeLabel, isNotEmpty);
     expect(routine.bedtimeLabel, isNotEmpty);
   });
+
+  test('로그인 계정 로스터가 비어도 데모 루틴으로 복구한다', () async {
+    SharedPreferences.setMockInitialValues({});
+    AppState.instance.signOut();
+    AppState.instance.saveRoster([], startDate: DateTime(2026, 8, 1));
+
+    final result = await loadAlertness();
+    final routine = skinRoutineFrom(result, now: DateTime(2026, 8, 21));
+
+    expect(result.roster, isNotEmpty);
+    expect(routine, isNotNull);
+  });
 }

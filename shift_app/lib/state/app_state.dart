@@ -200,12 +200,14 @@ class AppState extends ChangeNotifier {
       ShiftType.night,
       ShiftType.off,
     ];
-    final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
+    final demoRosterStart = DateTime(2026, 7, 1);
+    final demoRosterEnd = DateTime(2026, 9, 30);
+    final demoRosterDays = demoRosterEnd.difference(demoRosterStart).inDays + 1;
     roster = [
-      for (var day = 0; day < daysInMonth; day++)
+      for (var day = 0; day < demoRosterDays; day++)
         shiftPattern[day % shiftPattern.length],
     ];
-    rosterStartDate = DateTime(now.year, now.month);
+    rosterStartDate = demoRosterStart;
 
     const checkInSeeds = [
       (['많이 피곤해요', '잠이 잘 안 와요'], '나이트 퇴근 후에도 머리가 맑아서 잠드는 데 오래 걸렸어요.'),

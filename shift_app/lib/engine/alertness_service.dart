@@ -7,11 +7,17 @@ import 'package:shift_circadian_engine/models/hannay19.dart';
 import 'package:shift_circadian_engine/pressure/pressure.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
 import 'package:shift_circadian_engine/roster/light_schedule.dart';
+
 import '../state/app_state.dart';
 
 const _demoRoster = [
-  ShiftType.day, ShiftType.day, ShiftType.evening,
-  ShiftType.night, ShiftType.night, ShiftType.off, ShiftType.off,
+  ShiftType.day,
+  ShiftType.day,
+  ShiftType.evening,
+  ShiftType.night,
+  ShiftType.night,
+  ShiftType.off,
+  ShiftType.off,
 ];
 
 class AlertnessResult {
@@ -35,7 +41,8 @@ class AlertnessResult {
   final List<double> dlmos;
   final UserProfile profile;
 
-  bool isLowAt(double absHours) => riskWindows.any((w) => absHours >= w.$1 && absHours < w.$2);
+  bool isLowAt(double absHours) =>
+      riskWindows.any((w) => absHours >= w.$1 && absHours < w.$2);
 
   /// 지금 이 순간이 위험구간(하위 15%)에 들어가는지.
   bool get isLowNow {
@@ -49,8 +56,12 @@ class AlertnessResult {
 
 Future<AlertnessResult> loadAlertness() async {
   final app = AppState.instance;
-  final roster = app.roster ?? _demoRoster;
-  final startDate = app.rosterStartDate ??
+  final savedRoster = app.roster;
+  final roster = savedRoster == null || savedRoster.isEmpty
+      ? _demoRoster
+      : savedRoster;
+  final startDate =
+      app.rosterStartDate ??
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   final profile = app.hasProfile ? app.toUserProfile() : UserProfile();
 
@@ -61,7 +72,11 @@ Future<AlertnessResult> loadAlertness() async {
 
   final model = Hannay19();
   final eq = model.equilibrate(t, light, numLoops: 5);
-  final traj = model.integrate(t, initialCondition: eq.finalState, light: light);
+  final traj = model.integrate(
+    t,
+    initialCondition: eq.finalState,
+    light: light,
+  );
   final dlmos = model.dlmos(traj);
 
   final pres = simulatePressure(t, sleep);
@@ -69,7 +84,13 @@ Future<AlertnessResult> loadAlertness() async {
   final risks = riskWindows(t, alert);
 
   return AlertnessResult(
-    time: t, alert: alert, riskWindows: risks, sleep: sleep, startDate: startDate,
-    roster: roster, dlmos: dlmos, profile: profile,
+    time: t,
+    alert: alert,
+    riskWindows: risks,
+    sleep: sleep,
+    startDate: startDate,
+    roster: roster,
+    dlmos: dlmos,
+    profile: profile,
   );
 }

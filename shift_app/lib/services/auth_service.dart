@@ -321,12 +321,17 @@ class AuthService {
         caffeineServings: 2,
       );
 
-      if (rosterRows.isNotEmpty) {
+      final demoRosterRows = rosterRows.where((row) {
+        final date = DateTime.parse(row['work_date'] as String);
+        return !date.isBefore(DateTime(2026, 7, 1)) &&
+            date.isBefore(DateTime(2026, 10, 1));
+      }).toList();
+      if (demoRosterRows.isNotEmpty) {
         final firstDate = DateTime.parse(
-          rosterRows.first['work_date'] as String,
+          demoRosterRows.first['work_date'] as String,
         );
         AppState.instance.saveRoster([
-          for (final row in rosterRows)
+          for (final row in demoRosterRows)
             switch (row['shift_type'] as String) {
               'D' => ShiftType.day,
               'E' => ShiftType.evening,

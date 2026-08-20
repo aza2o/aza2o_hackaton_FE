@@ -1048,9 +1048,7 @@ class _InsightSectionState extends State<_InsightSection> {
                       child: Text(
                         text,
                         style: AppTypography.body02.copyWith(
-                          color: snap.hasError
-                              ? AppColors.error01
-                              : AppColors.textPrimary,
+                          color: AppColors.textPrimary,
                           height: 1.5,
                         ),
                       ),
