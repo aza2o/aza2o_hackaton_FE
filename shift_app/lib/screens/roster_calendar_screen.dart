@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shift_circadian_engine/roster/constants.dart'
     show ShiftType, shiftTypeFromCode;
+
 import '../engine/nudge_service.dart';
 import '../services/notification_service.dart';
 import '../state/app_state.dart';
@@ -50,7 +51,13 @@ class _RosterCalendarScreenState extends State<RosterCalendarScreen> {
     final start = s.rosterStartDate;
     final roster = s.roster;
     if (start == null || roster == null) return null;
-    final idx = DateTime(_month.year, _month.month, day).difference(start).inDays;
+    final date = DateTime(_month.year, _month.month, day);
+    if (s.isDemoAccount &&
+        (date.isBefore(DateTime(2026, 7, 1)) ||
+            date.isAfter(DateTime(2026, 9, 30)))) {
+      return null;
+    }
+    final idx = date.difference(start).inDays;
     return (idx >= 0 && idx < roster.length) ? idx : null;
   }
 
@@ -97,8 +104,9 @@ class _RosterCalendarScreenState extends State<RosterCalendarScreen> {
     setState(() {});
 
     // 근무가 바뀌면 목표 취침도 바뀌므로 예약된 알림을 다시 건다.
-    await NotificationService.instance
-        .rescheduleAll(await loadUpcomingNudgeTriggers());
+    await NotificationService.instance.rescheduleAll(
+      await loadUpcomingNudgeTriggers(),
+    );
   }
 
   @override
@@ -119,8 +127,10 @@ class _RosterCalendarScreenState extends State<RosterCalendarScreen> {
                 ),
                 Expanded(
                   child: Center(
-                    child: Text('${_month.year}년 ${_month.month}월',
-                        style: AppTypography.heading04),
+                    child: Text(
+                      '${_month.year}년 ${_month.month}월',
+                      style: AppTypography.heading04,
+                    ),
                   ),
                 ),
                 IconButton(
@@ -132,9 +142,12 @@ class _RosterCalendarScreenState extends State<RosterCalendarScreen> {
             ),
             const SizedBox(height: AppSpacing.sm),
             if (codes != null)
-              Text('날짜를 눌러 근무를 바꿀 수 있어요',
-                  style: AppTypography.caption01
-                      .copyWith(color: AppColors.textTertiary)),
+              Text(
+                '날짜를 눌러 근무를 바꿀 수 있어요',
+                style: AppTypography.caption01.copyWith(
+                  color: AppColors.textTertiary,
+                ),
+              ),
             const SizedBox(height: AppSpacing.md),
             const WeekdayHeader(),
             const SizedBox(height: AppSpacing.xs),
@@ -167,15 +180,21 @@ class _EmptyMonth extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
       child: Column(
         children: [
-          Icon(Icons.event_busy_outlined,
-              size: 40, color: AppColors.textPlaceholder),
+          Icon(
+            Icons.event_busy_outlined,
+            size: 40,
+            color: AppColors.textPlaceholder,
+          ),
           const SizedBox(height: AppSpacing.md),
           Text('$month월 근무표가 아직 없어요', style: AppTypography.subtitle04),
           const SizedBox(height: 4),
-          Text('근무표를 올리면 이 달의 넛지도 계산해드려요',
-              textAlign: TextAlign.center,
-              style: AppTypography.caption01
-                  .copyWith(color: AppColors.textTertiary)),
+          Text(
+            '근무표를 올리면 이 달의 넛지도 계산해드려요',
+            textAlign: TextAlign.center,
+            style: AppTypography.caption01.copyWith(
+              color: AppColors.textTertiary,
+            ),
+          ),
           const SizedBox(height: AppSpacing.lg),
           SizedBox(
             height: 48,
@@ -184,7 +203,8 @@ class _EmptyMonth extends StatelessWidget {
                 backgroundColor: AppColors.primary500,
                 foregroundColor: AppColors.gray900,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const RosterUploadScreen()),

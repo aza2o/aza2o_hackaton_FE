@@ -449,8 +449,19 @@ class AppState extends ChangeNotifier {
   /// 로스터를 확인한 달의 1일. 이게 있어야 "오늘"이 배열의 몇 번째
   /// 인덱스인지 계산할 수 있다.
   void saveRoster(List<ShiftType> roster, {required DateTime startDate}) {
-    this.roster = List.of(roster);
-    rosterStartDate = DateTime(startDate.year, startDate.month, startDate.day);
+    if (isDemoAccount) {
+      // 심사용 데모 계정은 서버/로컬에 과거 데이터가 남아 있어도
+      // 2026년 7~9월 범위를 절대 벗어나지 않는다.
+      this.roster = List.of(roster.take(92));
+      rosterStartDate = DateTime(2026, 7, 1);
+    } else {
+      this.roster = List.of(roster);
+      rosterStartDate = DateTime(
+        startDate.year,
+        startDate.month,
+        startDate.day,
+      );
+    }
     _persist();
     notifyListeners();
   }
