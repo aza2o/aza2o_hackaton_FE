@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_typography.dart';
 import 'home_screen.dart';
-import 'settings_screen.dart';
+import 'roster_calendar_screen.dart';
 
-/// 하단 탭바(홈/설정 2개) — 기존 확정 디자인 그대로. 다른 화면(로스터·
-/// AI 리포트·피부 루틴)은 탭이 아니라 홈에서 파생되는 2차 화면이므로
-/// 여기 포함하지 않는다 (`SHIFT_프론트엔드_기획서.md` §2 참고).
+/// 하단 탭바(홈/근무 달력). 설정은 탭이 아니라 홈 우측 상단 아이콘으로
+/// 들어간다 — 매일 여는 화면이 아니라서 탭 한 칸을 차지할 이유가 없고,
+/// 그 자리를 이 앱의 핵심 데이터인 근무 달력에 줬다. AI 리포트·피부
+/// 루틴도 탭이 아니라 홈 하단 카드에서 진입한다.
 class RootShell extends StatefulWidget {
   const RootShell({super.key});
 
@@ -19,7 +20,7 @@ class _RootShellState extends State<RootShell> {
 
   static const _screens = [
     HomeScreen(),
-    SettingsScreen(),
+    RosterCalendarScreen(),
   ];
 
   @override
@@ -54,8 +55,8 @@ class _RootShellState extends State<RootShell> {
                 ),
                 Expanded(
                   child: _TabItem(
-                    label: '설정',
-                    icon: Icons.settings_rounded,
+                    label: '근무 달력',
+                    icon: Icons.calendar_month_rounded,
                     selected: _index == 1,
                     onTap: () => setState(() => _index = 1),
                   ),

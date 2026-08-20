@@ -37,6 +37,15 @@ void main() {
     await tester.enterText(fields.at(1), 'test@example.com');
     await tester.enterText(fields.at(2), 'pw1234');
     await tester.enterText(fields.at(3), 'pw1234');
+
+    // 개인정보 필수 동의 전에는 가입 버튼이 잠겨 있다.
+    final signupButton =
+        tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+    expect(signupButton.onPressed, isNull);
+
+    await tester.tap(find.textContaining('[필수] 개인정보'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('가입하기'));
     await tester.pumpAndSettle();
     expect(find.byType(OnboardingFlow), findsOneWidget);
@@ -70,7 +79,9 @@ void main() {
     // 테스트 종료 시점에 pending 타이머로 남지 않도록 페이크 클록을 흘려보낸다.
     await tester.pump(const Duration(seconds: 9));
 
-    await tester.tap(find.text('설정'));
+    // 설정은 하단 탭에서 홈 우측 상단 아이콘으로 옮겨졌다(그 탭 자리는
+    // 근무 달력이 가져갔다).
+    await tester.tap(find.byIcon(Icons.settings_rounded));
     await tester.pumpAndSettle();
 
     expect(find.byType(SettingsScreen), findsOneWidget);

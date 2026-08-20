@@ -3,6 +3,7 @@ import 'package:shift_circadian_engine/nudge/circular_time.dart';
 import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
 import '../engine/alertness_service.dart';
+import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -36,8 +37,15 @@ class _ActogramData {
 /// 목표 취침(`idealSleepTimes`)은 실제 수면 이력이 아니라 [r.sleep](근무표
 /// 기반 예측 수면)을 폴백 이력으로 재사용한다 — 아직 헬스 연동 전이라
 /// `report_api.dart`의 데모 세션과 마찬가지로 근사치다.
-_ActogramData _buildRows(AlertnessResult r) {
-  final n = r.roster.length < 7 ? r.roster.length : 7;
+_ActogramData _buildRows(AlertnessResult r, int segment) {
+  final limit = segment == 0 ? 7 : 14;
+  final allIndices = List<int>.generate(
+    r.roster.length < limit ? r.roster.length : limit,
+    (i) => i,
+  );
+  final indices = segment == 2
+      ? allIndices.where((i) => r.roster[i] != ShiftType.off).take(8).toList()
+      : allIndices;
   final rows = <ActogramRow>[];
   final sleepAbs = [for (final w in r.sleep) (w.start, w.end)];
   final recentSessions = [for (final w in r.sleep) SleepSession(w.start, w.end)];
@@ -45,7 +53,7 @@ _ActogramData _buildRows(AlertnessResult r) {
   DateTime? calloutDate;
   int? calloutGapMin;
 
-  for (var i = 0; i < n; i++) {
+  for (final i in indices) {
     final dayStart = i * 24.0;
     final dayEnd = dayStart + 48.0;
     final shift = r.roster[i];
@@ -121,16 +129,93 @@ class _AiReportScreenState extends State<AiReportScreen> {
   int _segment = 0;
   static const _segments = ['주간', '월간', '근무루틴별'];
   late Future<AlertnessResult> _future;
-  late Future<AiReportResult> _reportFuture;
+  Future<AiReportResult>? _reportFuture;
+  final _scrollController = ScrollController();
+  final _insightKey = GlobalKey();
+  bool _requesting = false;
+
+  final _noteController = TextEditingController();
+
+  /// 빠른 선택 — 매번 타이핑하게 만들면 아무도 안 쓴다.
+  static const _quickStates = [
+    '많이 피곤해요',
+    '잠이 잘 안 와요',
+    '자다가 자꾸 깨요',
+    '두통이 있어요',
+    '오늘은 괜찮아요',
+  ];
+  final _selected = <String>{};
 
   @override
   void initState() {
     super.initState();
     _future = loadAlertness();
-    _reportFuture = _future.then(
-      (r) => fetchAiReport(roster: r.roster, profile: r.profile),
-    );
+    // 동의 전에는 외부(Gemini) 호출을 하지 않는다 — 화면을 열었다는
+    // 이유만으로 데이터가 국외로 나가면 안 된다.
+    // (initState에서는 setState를 거치지 않고 바로 넣는다.)
+    if (AppState.instance.aiConsent) _reportFuture = _buildReportFuture();
   }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 선택한 칩 + 자유 입력을 한 문장으로 합친다.
+  String get _stateNote {
+    final typed = _noteController.text.trim();
+    return [..._selected, if (typed.isNotEmpty) typed].join(', ');
+  }
+
+  Future<AiReportResult> _buildReportFuture() => _future.then((r) => fetchAiReport(
+        roster: r.roster,
+        profile: r.profile,
+        stateNote: _stateNote.isEmpty ? null : _stateNote,
+      ));
+
+  Future<void> _requestReport() async {
+    final request = _buildReportFuture();
+    setState(() {
+      _requesting = true;
+      _reportFuture = request;
+    });
+    try {
+      await request;
+      if (!mounted) return;
+      setState(() => _requesting = false);
+      final target = _insightKey.currentContext;
+      if (target != null) {
+        await Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          alignment: 0.12,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _requesting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('조언을 불러오지 못했어요. 잠시 후 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  String get _periodTitle => const ['이번 주 리듬', '최근 한 달 리듬', '근무 루틴별 리듬'][_segment];
+
+  String get _periodDescription => const [
+        '최근 7일 · 근무와 수면의 연결',
+        '최근 14일 · 누적 수면 부족과 회복 추세',
+        '오프를 제외한 근무일 · 교대 유형별 차이',
+      ][_segment];
+
+  String get _periodSummary => const [
+        '이번 주는 나이트 전후 수면 시작 시각의 흔들림이 가장 컸어요.',
+        '2주 동안 수면 부족이 누적됐지만 오프 다음 날에는 회복되는 흐름이 보여요.',
+        '나이트 근무일의 취침 지연이 데이·이브닝보다 크고 회복까지 더 오래 걸려요.',
+      ][_segment];
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +223,7 @@ class _AiReportScreenState extends State<AiReportScreen> {
       appBar: AppBar(title: const Text('AI 리포트')),
       body: SafeArea(
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
             _SegmentedControl(
@@ -150,9 +236,9 @@ class _AiReportScreenState extends State<AiReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('이번 주 리듬', style: AppTypography.subtitle02),
+                  Text(_periodTitle, style: AppTypography.subtitle02),
                   const SizedBox(height: 4),
-                  Text('근무 · 수면 · 예측 DLMO',
+                  Text(_periodDescription,
                       style: AppTypography.caption02
                           .copyWith(color: AppColors.textTertiary)),
                   const SizedBox(height: AppSpacing.lg),
@@ -168,7 +254,7 @@ class _AiReportScreenState extends State<AiReportScreen> {
                         return const SizedBox(
                             height: 160, child: Center(child: CircularProgressIndicator()));
                       }
-                      final data = _buildRows(result);
+                      final data = _buildRows(result, _segment);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -195,12 +281,94 @@ class _AiReportScreenState extends State<AiReportScreen> {
                       _LegendDot(color: AppColors.error01, label: '컨디션 저하 구간'),
                     ],
                   ),
+                  const SizedBox(height: AppSpacing.md),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.gray50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _periodSummary,
+                      style: AppTypography.caption01
+                          .copyWith(color: AppColors.textSecondary, height: 1.45),
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.xxl),
-            Text('이번 주 인사이트', style: AppTypography.subtitle03),
+            Text('지금 상태를 알려주세요', style: AppTypography.subtitle03),
+            const SizedBox(height: 4),
+            Text('적어주시면 계산 결과와 함께 읽고 오늘 할 일을 골라드려요',
+                style: AppTypography.caption02
+                    .copyWith(color: AppColors.textTertiary)),
             const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                for (final s in _quickStates)
+                  _StateChip(
+                    label: s,
+                    selected: _selected.contains(s),
+                    onTap: () => setState(() {
+                      if (!_selected.add(s)) _selected.remove(s);
+                    }),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              controller: _noteController,
+              maxLength: stateNoteMaxLength,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: '직접 적기 (예: 어제 나이트 끝나고 3시간밖에 못 잤어요)',
+                hintStyle: AppTypography.caption01
+                    .copyWith(color: AppColors.textPlaceholder),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary500,
+                  foregroundColor: AppColors.gray900,
+                  disabledBackgroundColor: AppColors.gray100,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed: AppState.instance.aiConsent && !_requesting
+                    ? _requestReport
+                    : null,
+                child: _requesting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.gray900,
+                        ),
+                      )
+                    : Text('이 상태로 조언 받기', style: AppTypography.button03),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxl),
+            Text(
+              const ['이번 주 인사이트', '월간 변화 인사이트', '근무 루틴 인사이트'][_segment],
+              key: _insightKey,
+              style: AppTypography.subtitle03,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            if (!AppState.instance.aiConsent)
+              const _AiConsentNotice()
+            else
             FutureBuilder<AiReportResult>(
               future: _reportFuture,
               builder: (context, snapshot) {
@@ -345,6 +513,68 @@ class _TinyEffectLine extends StatelessWidget {
           const SizedBox(width: 8),
           Text(text,
               style: AppTypography.caption03.copyWith(color: AppColors.textPlaceholder)),
+        ],
+      ),
+    );
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  const _StateChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary500 : AppColors.grayWhite,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected ? AppColors.primary500 : AppColors.gray100),
+        ),
+        child: Text(label,
+            style: AppTypography.caption01.copyWith(
+              color: selected ? AppColors.gray900 : AppColors.textSecondary,
+            )),
+      ),
+    );
+  }
+}
+
+/// 국외 이전 동의를 안 한 경우 — 호출 대신 이유를 보여준다.
+class _AiConsentNotice extends StatelessWidget {
+  const _AiConsentNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.gray50,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('AI 인사이트는 동의가 필요해요', style: AppTypography.subtitle04),
+          const SizedBox(height: 4),
+          Text(
+            '리포트 문구를 만들려면 근무·수면 요약을 Google(Gemini)로 보내야 해요. '
+            '설정 > AI 리포트에서 동의하면 바로 사용할 수 있어요.',
+            style: AppTypography.caption01
+                .copyWith(color: AppColors.textSecondary),
+          ),
         ],
       ),
     );

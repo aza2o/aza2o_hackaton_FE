@@ -4,11 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_app/screens/roster_upload_screen.dart';
 import 'package:shift_app/screens/roster_confirm_screen.dart';
 import 'package:shift_app/screens/ai_report_screen.dart';
-import 'package:shift_app/screens/skin_routine_screen.dart';
 import 'package:shift_app/health/health_signal_source.dart';
 import 'package:shift_app/screens/onboarding_flow.dart';
 import 'package:shift_app/screens/permission_screen.dart';
 import 'package:shift_app/screens/home_screen.dart';
+import 'package:shift_app/screens/settings_screen.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
@@ -63,16 +63,6 @@ void main() {
     expect(find.text('월간'), findsOneWidget);
   });
 
-  testWidgets('피부·손 루틴 → 점수/게이지 문구가 없어야 한다', (tester) async {
-    await tester.pumpWidget(_wrap(const SkinRoutineScreen()));
-    expect(find.text('오늘의 루틴 타이밍'), findsOneWidget);
-    expect(find.text('퇴근길 자외선 알림'), findsOneWidget);
-    // 금지된 패턴(점수/게이지 숫자 표기)이 없는지 확인
-    expect(find.textContaining('점'), findsNothing);
-    // F3(손 보습)은 기능에서 제외됨(2026-08-18)
-    expect(find.text('근무 중 손 보습'), findsNothing);
-  });
-
   testWidgets('온보딩 플로우 → 4단계를 거쳐 권한 화면까지 도달', (tester) async {
     await tester.pumpWidget(_wrap(const OnboardingFlow()));
     expect(find.text('근무 시각을 알려주세요'), findsOneWidget);
@@ -125,14 +115,48 @@ void main() {
     expect(find.byType(RosterUploadScreen), findsOneWidget);
   });
 
-  testWidgets('홈 화면 헤더 아이콘 → AI 리포트/피부 루틴으로 이동', (tester) async {
-    // 실기기 플랫폼 채널이 없는 위젯 테스트 환경이라 DemoHealthSource를 주입한다.
+  testWidgets('홈에서 AI 인사이트·피부 루틴을 바로 보고, 상세는 링크로 간다', (tester) async {
+    // 예전엔 둘 다 별도 화면으로 들어가야 볼 수 있었다. 지금은 홈 하단에
+    // 펼쳐지고, 액토그램 같은 상세만 AI 리포트로 넘긴다.
+    // ListView가 지연 생성이라, 화면 밖 섹션은 스크롤해야 만들어진다.
+    await tester.binding.setSurfaceSize(const Size(400, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
-    final icons = find.byIcon(Icons.calendar_today_outlined);
-    expect(icons, findsOneWidget);
-    await tester.tap(icons);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('오늘의 인사이트'), 300);
+    expect(find.text('오늘의 인사이트'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('피부 루틴'), 300);
+    expect(find.text('피부 루틴'), findsOneWidget);
+
+    await tester.tap(find.text('리듬 자세히 보기'));
     await tester.pumpAndSettle();
     expect(find.byType(AiReportScreen), findsOneWidget);
+  });
+
+  testWidgets('피부 루틴 섹션 → 점수·게이지·진단 문구가 없어야 한다', (tester) async {
+    // 근거 문서 §2·§5가 명시적으로 금지한 패턴. 화면이 홈으로 옮겨졌어도
+    // 이 보증은 그대로 지켜야 한다.
+    await tester.binding.setSurfaceSize(const Size(400, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('피부 루틴'), 300);
+    expect(find.text('무엇을 바르는지가 아니라 언제 바르는지를 제안해요'), findsOneWidget);
+    expect(find.textContaining('점'), findsNothing);
+  });
+
+  testWidgets('홈 헤더 설정 아이콘 → 설정 화면으로 이동', (tester) async {
+    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.settings_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
   });
 
   testWidgets('홈 화면 → 계산 엔진이 실제 넛지를 채워 렌더링한다 (로딩 스피너가 사라지고 행동 목록이 뜸)',

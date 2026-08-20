@@ -4,7 +4,6 @@ import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
-import 'root_shell.dart';
 import 'roster_upload_screen.dart';
 
 /// 권한 온보딩 (`SHIFT_개발기획서.md` §7-2). 알림·정확 알람(Android)·배터리
@@ -29,9 +28,15 @@ class PermissionScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
-                  Text('알림이 제때 오려면 필요해요', style: AppTypography.heading04),
+                  Text('알림을 허용해야 넛지가 동작해요', style: AppTypography.heading04),
                   const SizedBox(height: AppSpacing.sm),
-                  Text('넛지는 타이밍이 곧 효과예요 — 아래 권한이 있어야 정확한 시각에 알려드릴 수 있어요',
+                  // 넛지 문구 자체는 강요하지 않되(지킬 수 없는 근무를
+                  // 하는 사용자에게 명령조는 죄책감만 남긴다), 권한 요청은
+                  // 결과를 분명히 말한다 — 알림이 없으면 이 앱의 핵심인
+                  // "정해진 시각에 알려주기"가 통째로 사라지기 때문이다.
+                  Text('취침·카페인·빛 노출은 몇 분 차이로 효과가 갈려요. '
+                      '알림을 끄면 매번 직접 앱을 열어 확인해야 하고, '
+                      '그 시각을 놓치면 계산한 의미가 없어요.',
                       style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
                   const SizedBox(height: AppSpacing.xxl),
                   const _PermissionCard(
@@ -97,12 +102,15 @@ class PermissionScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
               child: TextButton(
                 onPressed: () {
+                  // 알림을 안 받더라도 근무표는 있어야 계산이 된다 —
+                  // 예전엔 여기서 홈으로 바로 가버려서 로스터가 빈 채로
+                  // 앱이 시작됐다.
                   Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const RootShell()),
+                    MaterialPageRoute(builder: (_) => const RosterUploadScreen()),
                     (route) => false,
                   );
                 },
-                child: Text('나중에 하기',
+                child: Text('알림 없이 사용할게요',
                     style: AppTypography.body02.copyWith(color: AppColors.textTertiary)),
               ),
             ),

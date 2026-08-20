@@ -1,0 +1,24 @@
+{
+  // 모노레포라서 pubspec.yaml이 루트가 아니라 shift_app/ 안에 있다.
+  // 이 설정 없이 lib/main.dart에서 Run을 누르면 Dart 확장이 Flutter
+  // 프로젝트를 못 찾고 `dart main.dart`로 실행해버려서, dart:ui가 없다며
+  // 에러 5만 개가 쏟아진다. cwd를 shift_app으로 잡아주면 Flutter로 붙는다.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "shift_app (debug)",
+      "request": "launch",
+      "type": "dart",
+      "program": "shift_app/lib/main.dart",
+      "cwd": "shift_app"
+    },
+    {
+      "name": "shift_app (profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "shift_app/lib/main.dart",
+      "cwd": "shift_app",
+      "flutterMode": "profile"
+    }
+  ]
+}

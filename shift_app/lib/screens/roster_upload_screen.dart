@@ -75,7 +75,7 @@ class _RosterUploadScreenState extends State<RosterUploadScreen> {
                   Text('⚠️ 업로드 전 꼭 확인해주세요', style: AppTypography.subtitle04),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    '근무표에는 동료들의 일정도 함께 들어있어요. SHIFT는 본인 행만 추출하고, '
+                    '근무표에는 동료들의 일정도 함께 들어있어요. 슬립레디는 본인 행만 추출하고, '
                     '원본 파일은 서버에 저장하지 않고 즉시 폐기합니다.',
                     style: AppTypography.caption01
                         .copyWith(color: AppColors.textSecondary),
@@ -133,12 +133,20 @@ class _RosterUploadScreenState extends State<RosterUploadScreen> {
 
   Future<void> _pickAndUpload(BuildContext context) async {
     final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls'],
+      // iOS Simulator의 Files 앱이 xlsx UTType을 제대로 분류하지 못하면
+      // custom 확장자 필터에서 다운로드한 파일 자체가 숨겨진다. 선택기에는
+      // 모든 파일을 보여주고, 아래에서 파일명 확장자를 직접 검증한다.
+      type: FileType.any,
       withData: true, // 웹 포함 모든 플랫폼에서 bytes로 받기 위함
     );
     if (picked == null || picked.files.isEmpty) return;
     final file = picked.files.single;
+    final lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.xlsx') && !lowerName.endsWith('.xls')) {
+      if (!context.mounted) return;
+      _showError(context, '엑셀 파일(.xlsx 또는 .xls)만 선택할 수 있어요.');
+      return;
+    }
     final bytes = file.bytes;
     if (bytes == null) {
       if (!context.mounted) return;
