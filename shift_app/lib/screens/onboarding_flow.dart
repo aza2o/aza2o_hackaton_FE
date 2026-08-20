@@ -786,7 +786,12 @@ class _HealthCheckCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Apple Health 연동 (선택)', style: AppTypography.subtitle04),
+          Text(
+            defaultTargetPlatform == TargetPlatform.android
+                ? 'Galaxy Watch · Health Connect 연동 (선택)'
+                : 'Apple Watch · Apple Health 연동 (선택)',
+            style: AppTypography.subtitle04,
+          ),
           const SizedBox(height: 4),
           Text(
             checked

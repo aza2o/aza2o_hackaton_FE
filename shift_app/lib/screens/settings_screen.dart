@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../services/auth_service.dart';
@@ -23,12 +24,17 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  String get _healthPlatformName =>
+      defaultTargetPlatform == TargetPlatform.android
+          ? 'Health Connect'
+          : 'Apple Health';
+
   Future<void> _openWearableConnection() async {
     if (!AppState.instance.wearableConsent) {
       final agreed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text('Apple Health를 연결할까요?', style: AppTypography.subtitle02),
+          title: Text('$_healthPlatformName를 연결할까요?', style: AppTypography.subtitle02),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,7 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Apple Health 연결하기'),
+              child: Text('$_healthPlatformName 연결하기'),
             ),
           ],
         ),
