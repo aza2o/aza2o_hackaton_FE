@@ -6,6 +6,7 @@
 // 고정 문자열이었고, 그래서 14:30에 "AM" 같은 표기까지 붙어 있었다.
 // 여기서 실제 수면 창으로 계산한다.
 import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
+
 import 'alertness_service.dart';
 import 'gap_service.dart';
 
@@ -54,18 +55,38 @@ class SkinRoutine {
 /// 안 보여주는 게 낫다).
 SkinRoutine? skinRoutineFrom(AlertnessResult r, {DateTime? now}) {
   final today = now ?? DateTime.now();
-  final dayIndex = DateTime(today.year, today.month, today.day)
-      .difference(r.startDate)
-      .inDays;
-  if (dayIndex < 0 || dayIndex >= r.roster.length) return null;
+  if (r.roster.isEmpty) return null;
+  final rawDayIndex = DateTime(
+    today.year,
+    today.month,
+    today.day,
+  ).difference(r.startDate).inDays;
+  final dayIndex = rawDayIndex.clamp(0, r.roster.length - 1);
 
   final dayStart = dayIndex * 24.0;
-  // 오늘 자정~다음 자정 사이에 시작하는 주 수면 창.
-  final main = r.sleep.where(
-    (w) => w.kind == 'main' && w.start >= dayStart && w.start < dayStart + 24,
-  );
-  if (main.isEmpty) return null;
-  final w = main.first;
+  // 이브닝·나이트는 오늘 근무 뒤 주 수면이 다음 날 자정 이후 시작할 수
+  // 있다. 오늘 안에 시작하는 창만 찾으면 루틴 전체가 사라지므로, 없을 때는
+  // 오늘 정오와 가장 가까운 주 수면 창을 사용한다.
+  final todayMain = r.sleep
+      .where(
+        (w) =>
+            w.kind == 'main' && w.start >= dayStart && w.start < dayStart + 24,
+      )
+      .toList();
+  (double, double)? selectedSleep;
+  if (todayMain.isNotEmpty) {
+    selectedSleep = (todayMain.first.start, todayMain.first.end);
+  } else {
+    final nearestMain = r.sleep.where((w) => w.kind == 'main').toList()
+      ..sort(
+        (a, b) => (a.start - (dayStart + 12)).abs().compareTo(
+          (b.start - (dayStart + 12)).abs(),
+        ),
+      );
+    if (nearestMain.isNotEmpty) {
+      selectedSleep = (nearestMain.first.start, nearestMain.first.end);
+    }
+  }
 
   final shift = r.roster[dayIndex];
   final isNight = shift == ShiftType.night;
@@ -87,6 +108,14 @@ SkinRoutine? skinRoutineFrom(AlertnessResult r, {DateTime? now}) {
   final todayDeficitMinutes = sleepDay.deficitMinutes > 0
       ? sleepDay.deficitMinutes
       : 0;
+  final fallbackSleep = switch (shift) {
+    ShiftType.day => (dayStart + 22.5, dayStart + 30.5),
+    ShiftType.evening => (dayStart + 24.5, dayStart + 32.5),
+    ShiftType.night => (dayStart + 9.0, dayStart + 17.0),
+    ShiftType.off => (dayStart + 23.5, dayStart + 31.5),
+  };
+  final bedtime = selectedSleep?.$1 ?? fallbackSleep.$1;
+  final wake = selectedSleep?.$2 ?? fallbackSleep.$2;
 
   String? commute;
   if (isNight) {
@@ -96,8 +125,8 @@ SkinRoutine? skinRoutineFrom(AlertnessResult r, {DateTime? now}) {
   }
 
   return SkinRoutine(
-    wakeLabel: _hhmm(w.end),
-    bedtimeLabel: _hhmm(w.start),
+    wakeLabel: _hhmm(wake),
+    bedtimeLabel: _hhmm(bedtime),
     isNightShift: isNight,
     commuteLabel: commute,
     shiftLabel: shiftLabel,
