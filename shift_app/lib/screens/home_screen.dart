@@ -11,6 +11,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/app_card.dart';
 import 'ai_report_screen.dart';
+import 'settings_screen.dart';
 import 'skin_routine_screen.dart';
 
 /// "최근 회복 상태" 카드에 쓰는 값 — 조회 실패·타임아웃·데이터 없음을 모두
@@ -163,22 +164,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
-                      Row(
-                        children: [
-                          _HeaderIconButton(
-                            icon: Icons.calendar_today_outlined,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const AiReportScreen()),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          _HeaderIconButton(
-                            icon: Icons.speed_outlined,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const SkinRoutineScreen()),
-                            ),
-                          ),
-                        ],
+                      // 설정은 여기 하나만 둔다. 예전엔 이 자리에 AI
+                      // 리포트·피부 루틴 아이콘 2개가 있었는데, 아이콘만
+                      // 봐서는 뭔지 알 수 없어서 아래 카드로 내렸다.
+                      _HeaderIconButton(
+                        icon: Icons.settings_rounded,
+                        tooltip: '설정',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                        ),
                       ),
                     ],
                   ),
@@ -286,6 +280,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
                         return _GapTrendChart(gapMinutes: gaps);
                       },
+                    ),
+                  ),
+                  // 예전엔 헤더의 아이콘 2개로만 들어갈 수 있던 화면들 —
+                  // 뭔지 알아볼 수 있게 이름을 달아 카드로 내렸다.
+                  const SizedBox(height: AppSpacing.xxl),
+                  _NavCard(
+                    icon: Icons.insights_rounded,
+                    title: 'AI 리포트',
+                    desc: '이번 주 리듬과 액토그램을 확인해요',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AiReportScreen()),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  _NavCard(
+                    icon: Icons.spa_rounded,
+                    title: '피부 루틴',
+                    desc: '근무 주기에 맞춘 관리 루틴',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SkinRoutineScreen()),
                     ),
                   ),
                 ],
@@ -465,22 +479,75 @@ class _TodayContent extends StatelessWidget {
 }
 
 class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({required this.icon, required this.onTap});
+  const _HeaderIconButton({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+  });
   final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: const BoxDecoration(
+            color: AppColors.grayWhite,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 18, color: AppColors.textPrimary),
+        ),
+      ),
+    );
+  }
+}
+
+/// 홈 하단에서 2차 화면(AI 리포트·피부 루틴)으로 가는 카드.
+class _NavCard extends StatelessWidget {
+  const _NavCard({
+    required this.icon,
+    required this.title,
+    required this.desc,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String desc;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: const BoxDecoration(
-          color: AppColors.grayWhite,
-          shape: BoxShape.circle,
+      behavior: HitTestBehavior.opaque,
+      child: AppCard(
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: AppColors.textPrimary),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTypography.subtitle04),
+                  const SizedBox(height: 2),
+                  Text(desc,
+                      style: AppTypography.caption02
+                          .copyWith(color: AppColors.textTertiary)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 20, color: AppColors.textPlaceholder),
+          ],
         ),
-        child: Icon(icon, size: 18, color: AppColors.textPrimary),
       ),
     );
   }

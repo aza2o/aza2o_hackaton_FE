@@ -3,6 +3,7 @@ import 'package:shift_circadian_engine/nudge/circular_time.dart';
 import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
 import '../engine/alertness_service.dart';
+import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -121,15 +122,50 @@ class _AiReportScreenState extends State<AiReportScreen> {
   int _segment = 0;
   static const _segments = ['주간', '월간', '근무루틴별'];
   late Future<AlertnessResult> _future;
-  late Future<AiReportResult> _reportFuture;
+  Future<AiReportResult>? _reportFuture;
+
+  final _noteController = TextEditingController();
+
+  /// 빠른 선택 — 매번 타이핑하게 만들면 아무도 안 쓴다.
+  static const _quickStates = [
+    '많이 피곤해요',
+    '잠이 잘 안 와요',
+    '자다가 자꾸 깨요',
+    '두통이 있어요',
+    '오늘은 괜찮아요',
+  ];
+  final _selected = <String>{};
 
   @override
   void initState() {
     super.initState();
     _future = loadAlertness();
-    _reportFuture = _future.then(
-      (r) => fetchAiReport(roster: r.roster, profile: r.profile),
-    );
+    // 동의 전에는 외부(Gemini) 호출을 하지 않는다 — 화면을 열었다는
+    // 이유만으로 데이터가 국외로 나가면 안 된다.
+    // (initState에서는 setState를 거치지 않고 바로 넣는다.)
+    if (AppState.instance.aiConsent) _reportFuture = _buildReportFuture();
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  /// 선택한 칩 + 자유 입력을 한 문장으로 합친다.
+  String get _stateNote {
+    final typed = _noteController.text.trim();
+    return [..._selected, if (typed.isNotEmpty) typed].join(', ');
+  }
+
+  Future<AiReportResult> _buildReportFuture() => _future.then((r) => fetchAiReport(
+        roster: r.roster,
+        profile: r.profile,
+        stateNote: _stateNote.isEmpty ? null : _stateNote,
+      ));
+
+  void _requestReport() {
+    setState(() => _reportFuture = _buildReportFuture());
   }
 
   @override
@@ -199,8 +235,62 @@ class _AiReportScreenState extends State<AiReportScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.xxl),
+            Text('지금 상태를 알려주세요', style: AppTypography.subtitle03),
+            const SizedBox(height: 4),
+            Text('적어주시면 계산 결과와 함께 읽고 오늘 할 일을 골라드려요',
+                style: AppTypography.caption02
+                    .copyWith(color: AppColors.textTertiary)),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                for (final s in _quickStates)
+                  _StateChip(
+                    label: s,
+                    selected: _selected.contains(s),
+                    onTap: () => setState(() {
+                      if (!_selected.add(s)) _selected.remove(s);
+                    }),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextField(
+              controller: _noteController,
+              maxLength: stateNoteMaxLength,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: '직접 적기 (예: 어제 나이트 끝나고 3시간밖에 못 잤어요)',
+                hintStyle: AppTypography.caption01
+                    .copyWith(color: AppColors.textPlaceholder),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary500,
+                  foregroundColor: AppColors.gray900,
+                  disabledBackgroundColor: AppColors.gray100,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                onPressed:
+                    AppState.instance.aiConsent ? _requestReport : null,
+                child: Text('이 상태로 조언 받기', style: AppTypography.button03),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxl),
             Text('이번 주 인사이트', style: AppTypography.subtitle03),
             const SizedBox(height: AppSpacing.sm),
+            if (!AppState.instance.aiConsent)
+              const _AiConsentNotice()
+            else
             FutureBuilder<AiReportResult>(
               future: _reportFuture,
               builder: (context, snapshot) {
@@ -345,6 +435,68 @@ class _TinyEffectLine extends StatelessWidget {
           const SizedBox(width: 8),
           Text(text,
               style: AppTypography.caption03.copyWith(color: AppColors.textPlaceholder)),
+        ],
+      ),
+    );
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  const _StateChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary500 : AppColors.grayWhite,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected ? AppColors.primary500 : AppColors.gray100),
+        ),
+        child: Text(label,
+            style: AppTypography.caption01.copyWith(
+              color: selected ? AppColors.gray900 : AppColors.textSecondary,
+            )),
+      ),
+    );
+  }
+}
+
+/// 국외 이전 동의를 안 한 경우 — 호출 대신 이유를 보여준다.
+class _AiConsentNotice extends StatelessWidget {
+  const _AiConsentNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.gray50,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('AI 인사이트는 동의가 필요해요', style: AppTypography.subtitle04),
+          const SizedBox(height: 4),
+          Text(
+            '리포트 문구를 만들려면 근무·수면 요약을 Google(Gemini)로 보내야 해요. '
+            '설정 > AI 리포트에서 동의하면 바로 사용할 수 있어요.',
+            style: AppTypography.caption01
+                .copyWith(color: AppColors.textSecondary),
+          ),
         ],
       ),
     );

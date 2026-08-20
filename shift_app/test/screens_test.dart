@@ -9,6 +9,7 @@ import 'package:shift_app/health/health_signal_source.dart';
 import 'package:shift_app/screens/onboarding_flow.dart';
 import 'package:shift_app/screens/permission_screen.dart';
 import 'package:shift_app/screens/home_screen.dart';
+import 'package:shift_app/screens/settings_screen.dart';
 
 Widget _wrap(Widget child) => MaterialApp(home: child);
 
@@ -125,14 +126,26 @@ void main() {
     expect(find.byType(RosterUploadScreen), findsOneWidget);
   });
 
-  testWidgets('홈 화면 헤더 아이콘 → AI 리포트/피부 루틴으로 이동', (tester) async {
+  testWidgets('홈 하단 카드 → AI 리포트/피부 루틴으로 이동', (tester) async {
+    // 헤더 아이콘 2개(무슨 화면인지 알 수 없었다) 대신 홈 하단에 이름이
+    // 붙은 카드로 내려왔다 — 헤더에는 설정만 남는다.
     // 실기기 플랫폼 채널이 없는 위젯 테스트 환경이라 DemoHealthSource를 주입한다.
     await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
-    final icons = find.byIcon(Icons.calendar_today_outlined);
-    expect(icons, findsOneWidget);
-    await tester.tap(icons);
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('AI 리포트'), 300);
+    await tester.tap(find.text('AI 리포트'));
     await tester.pumpAndSettle();
     expect(find.byType(AiReportScreen), findsOneWidget);
+  });
+
+  testWidgets('홈 헤더 설정 아이콘 → 설정 화면으로 이동', (tester) async {
+    await tester.pumpWidget(_wrap(const HomeScreen(healthSource: DemoHealthSource())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.settings_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsScreen), findsOneWidget);
   });
 
   testWidgets('홈 화면 → 계산 엔진이 실제 넛지를 채워 렌더링한다 (로딩 스피너가 사라지고 행동 목록이 뜸)',

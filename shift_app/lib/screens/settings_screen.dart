@@ -5,21 +5,30 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/app_card.dart';
 import 'login_screen.dart';
+import 'privacy_policy_screen.dart';
 import 'roster_upload_screen.dart';
 
 /// 기존 확정 디자인(구 Figma 파일 `35:3968`)을 그대로 구현.
-class SettingsScreen extends StatelessWidget {
+///
+/// 하단 탭에서 홈 우측 상단 아이콘으로 옮겨졌기 때문에(그 탭 자리는 근무
+/// 달력이 가져갔다) 뒤로 갈 수 있게 AppBar를 둔다 — 탭이던 시절엔 화면
+/// 안의 '설정' 제목만 있으면 됐다.
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('설정')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
-            Text('설정', style: AppTypography.heading03),
-            const SizedBox(height: AppSpacing.xxl),
             AppCard(
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -67,6 +76,50 @@ class SettingsScreen extends StatelessWidget {
                   _SettingsToggleRow(label: '행동 알림', value: true),
                   const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
                   _SettingsToggleRow(label: '주간 리포트 알림', value: false),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xxl),
+            _SectionLabel('AI 리포트'),
+            AppCard(
+              child: Column(
+                children: [
+                  // 가입 때 받은 선택 동의를 언제든 켜고 끌 수 있어야 한다
+                  // — 동의 철회가 막혀 있으면 '선택' 동의가 아니다.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('AI 인사이트 사용', style: AppTypography.body02),
+                            const SizedBox(height: 2),
+                            Text('근무·수면 요약이 Google(Gemini)로 전송돼요',
+                                style: AppTypography.caption02
+                                    .copyWith(color: AppColors.textTertiary)),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: AppState.instance.aiConsent,
+                        onChanged: (v) => setState(() {
+                          AppState.instance.saveConsent(
+                            privacy: AppState.instance.privacyConsent,
+                            ai: v,
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                    ),
+                    child: _SettingsRow(
+                        label: '개인정보 처리방침', value: '', showChevron: true),
+                  ),
                 ],
               ),
             ),

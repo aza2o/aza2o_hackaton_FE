@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
+import '../widgets/roster_calendar.dart';
 import 'root_shell.dart';
 
 /// 로스터 확인 (Figma 신규 파일 `12:2`). 파싱 결과를 캘린더로 보여주고
@@ -36,21 +37,6 @@ class RosterConfirmScreen extends StatefulWidget {
   @override
   State<RosterConfirmScreen> createState() => _RosterConfirmScreenState();
 }
-
-const _shiftCycle = ['D', 'E', 'N', 'O'];
-const _shiftColor = {
-  'D': AppColors.primary400,
-  'E': AppColors.information02,
-  'N': AppColors.gray800,
-  'O': AppColors.gray100,
-};
-const _shiftTextColor = {
-  'D': AppColors.textPrimary,
-  'E': AppColors.grayWhite,
-  'N': AppColors.grayWhite,
-  'O': AppColors.textTertiary,
-};
-const _shiftLabel = {'D': '데이', 'E': '이브닝', 'N': '나이트', 'O': '오프'};
 
 class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
   static const _demoPattern = ['D', 'D', 'E', 'E', 'N', 'N', 'O'];
@@ -84,20 +70,19 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
             Text('${widget.userName} 간호사 · 잘못된 날짜는 눌러서 수정하세요',
                 style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
             const SizedBox(height: AppSpacing.lg),
-            _WeekdayHeader(),
+            const WeekdayHeader(),
             const SizedBox(height: AppSpacing.xs),
-            _CalendarGrid(
+            CalendarGrid(
               shifts: _shifts,
               startOffset: _startOffset,
               onTapDay: (day) {
                 setState(() {
-                  final idx = _shiftCycle.indexOf(_shifts[day]);
-                  _shifts[day] = _shiftCycle[(idx + 1) % _shiftCycle.length];
+                  _shifts[day] = nextShiftCode(_shifts[day]);
                 });
               },
             ),
             const SizedBox(height: AppSpacing.lg),
-            _Legend(),
+            const ShiftLegend(),
             if (_unmappedCodeCount > 0) ...[
               const SizedBox(height: AppSpacing.md),
               Container(
@@ -156,111 +141,6 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _WeekdayHeader extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    const labels = ['월', '화', '수', '목', '금', '토', '일'];
-    return Row(
-      children: [
-        for (var i = 0; i < 7; i++)
-          Expanded(
-            child: Center(
-              child: Text(labels[i],
-                  style: AppTypography.caption02.copyWith(
-                    color: (i == 5 || i == 6)
-                        ? AppColors.textPlaceholder
-                        : AppColors.textTertiary,
-                  )),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _CalendarGrid extends StatelessWidget {
-  const _CalendarGrid({
-    required this.shifts,
-    required this.startOffset,
-    required this.onTapDay,
-  });
-
-  final List<String> shifts;
-  final int startOffset;
-  final ValueChanged<int> onTapDay;
-
-  @override
-  Widget build(BuildContext context) {
-    final totalCells = startOffset + shifts.length;
-    final rows = (totalCells / 7).ceil();
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: rows * 7,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 7,
-        mainAxisSpacing: AppSpacing.xs,
-        crossAxisSpacing: AppSpacing.xs,
-        childAspectRatio: 0.85,
-      ),
-      itemBuilder: (context, cellIdx) {
-        final day = cellIdx - startOffset;
-        if (day < 0 || day >= shifts.length) return const SizedBox.shrink();
-        final shift = shifts[day];
-        return GestureDetector(
-          onTap: () => onTapDay(day),
-          child: Container(
-            decoration: BoxDecoration(
-              color: _shiftColor[shift],
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.all(6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${day + 1}',
-                    style: AppTypography.caption02
-                        .copyWith(color: _shiftTextColor[shift])),
-                const Spacer(),
-                Text(shift,
-                    style: AppTypography.subtitle03
-                        .copyWith(color: _shiftTextColor[shift])),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _Legend extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: AppSpacing.lg,
-      runSpacing: AppSpacing.xs,
-      children: _shiftCycle.map((code) {
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                  color: _shiftColor[code], shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 6),
-            Text('$code ${_shiftLabel[code]}',
-                style: AppTypography.caption02
-                    .copyWith(color: AppColors.textTertiary)),
-          ],
-        );
-      }).toList(),
     );
   }
 }

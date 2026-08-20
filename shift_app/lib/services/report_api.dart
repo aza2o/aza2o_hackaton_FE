@@ -20,9 +20,21 @@ class AiReportResult {
   final String comment;
 }
 
+/// 사용자가 직접 적는 "지금 상태" 메모의 최대 길이. 프롬프트로 그대로
+/// 들어가므로 길이를 제한해 토큰 비용과 남용을 함께 막는다.
+const stateNoteMaxLength = 200;
+
+/// [stateNote]는 사용자가 직접 입력한 현재 컨디션(선택). 계정 정보는
+/// 보내지 않는다 — 무엇을 보내는지는 `privacy_policy_screen.dart` §4에
+/// 적힌 내용과 정확히 일치해야 한다.
+///
+/// ⚠️ 서버(Supabase Edge Function) 소스가 이 저장소에 없다. 클라이언트는
+/// stateNote를 실어 보내지만, 배포된 함수가 이 필드를 프롬프트에 넣도록
+/// 수정되기 전까지는 리포트 문구에 반영되지 않는다.
 Future<AiReportResult> fetchAiReport({
   required List<ShiftType> roster,
   required UserProfile profile,
+  String? stateNote,
 }) async {
   final windowDays = roster.length < _reportWindowDays ? roster.length : _reportWindowDays;
 
@@ -44,6 +56,10 @@ Future<AiReportResult> fetchAiReport({
       'gapMinutes': gapMinutes,
       'sleepDebtMin': sleepDebtMin,
       'shiftPattern': shiftPattern,
+      if (stateNote != null && stateNote.trim().isNotEmpty)
+        'stateNote': stateNote.trim().length > stateNoteMaxLength
+            ? stateNote.trim().substring(0, stateNoteMaxLength)
+            : stateNote.trim(),
     }),
   );
   if (res.statusCode != 200) {
