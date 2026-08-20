@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shift_circadian_engine/nudge/circular_time.dart';
 import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
+
 import '../engine/alertness_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
@@ -13,11 +14,18 @@ import '../services/report_api.dart';
 
 double _clip(double v, double lo, double hi) => v < lo ? lo : (v > hi ? hi : v);
 
-List<(double, double)> _windowsIn(List<(double, double)> src, double dayStart, double dayEnd) {
+List<(double, double)> _windowsIn(
+  List<(double, double)> src,
+  double dayStart,
+  double dayEnd,
+) {
   final out = <(double, double)>[];
   for (final (s, e) in src) {
     if (e <= dayStart || s >= dayEnd) continue;
-    out.add((_clip(s, dayStart, dayEnd) - dayStart, _clip(e, dayStart, dayEnd) - dayStart));
+    out.add((
+      _clip(s, dayStart, dayEnd) - dayStart,
+      _clip(e, dayStart, dayEnd) - dayStart,
+    ));
   }
   return out;
 }
@@ -48,7 +56,9 @@ _ActogramData _buildRows(AlertnessResult r, int segment) {
       : allIndices;
   final rows = <ActogramRow>[];
   final sleepAbs = [for (final w in r.sleep) (w.start, w.end)];
-  final recentSessions = [for (final w in r.sleep) SleepSession(w.start, w.end)];
+  final recentSessions = [
+    for (final w in r.sleep) SleepSession(w.start, w.end),
+  ];
 
   DateTime? calloutDate;
   int? calloutGapMin;
@@ -62,7 +72,11 @@ _ActogramData _buildRows(AlertnessResult r, int segment) {
     if (shift != ShiftType.off) {
       final timing = r.profile.shiftTimings[shift]!;
       final start = dayStart + timing.start;
-      workWindows = _windowsIn([(start, start + timing.duration)], dayStart, dayEnd);
+      workWindows = _windowsIn(
+        [(start, start + timing.duration)],
+        dayStart,
+        dayEnd,
+      );
     }
 
     var dlmoHour = 24.0;
@@ -70,8 +84,10 @@ _ActogramData _buildRows(AlertnessResult r, int segment) {
     if (inRange.isNotEmpty) {
       dlmoHour = inRange.first - dayStart;
     } else if (r.dlmos.isNotEmpty) {
-      final nearest =
-          r.dlmos.reduce((a, b) => (a - (dayStart + 24)).abs() < (b - (dayStart + 24)).abs() ? a : b);
+      final nearest = r.dlmos.reduce(
+        (a, b) =>
+            (a - (dayStart + 24)).abs() < (b - (dayStart + 24)).abs() ? a : b,
+      );
       dlmoHour = _clip(nearest - dayStart, 0, 48);
     }
 
@@ -91,7 +107,12 @@ _ActogramData _buildRows(AlertnessResult r, int segment) {
       if (sleepWindows.isNotEmpty) {
         final actualStart = sleepWindows.first.$1 + dayStart;
         final gapMin =
-            (circularShortestDiffHours(ideal.bedtime % 24.0, actualStart % 24.0) * 60).round();
+            (circularShortestDiffHours(
+                      ideal.bedtime % 24.0,
+                      actualStart % 24.0,
+                    ) *
+                    60)
+                .round();
         if (calloutGapMin == null || gapMin.abs() > calloutGapMin.abs()) {
           calloutGapMin = gapMin;
           calloutDate = r.startDate.add(Duration(days: i));
@@ -103,14 +124,16 @@ _ActogramData _buildRows(AlertnessResult r, int segment) {
 
     final date = r.startDate.add(Duration(days: i));
 
-    rows.add(ActogramRow(
-      label: '${date.month}/${date.day}',
-      sleep: sleepWindows,
-      work: workWindows,
-      dlmoHour: dlmoHour,
-      riskWindows: _windowsIn(r.riskWindows, dayStart, dayEnd),
-      idealBedtimeHour: idealBedtimeHour,
-    ));
+    rows.add(
+      ActogramRow(
+        label: '${date.month}/${date.day}',
+        sleep: sleepWindows,
+        work: workWindows,
+        dlmoHour: dlmoHour,
+        riskWindows: _windowsIn(r.riskWindows, dayStart, dayEnd),
+        idealBedtimeHour: idealBedtimeHour,
+      ),
+    );
   }
   return _ActogramData(rows, calloutDate, calloutGapMin);
 }
@@ -169,11 +192,13 @@ class _AiReportScreenState extends State<AiReportScreen> {
     return [..._selected, if (typed.isNotEmpty) typed].join(', ');
   }
 
-  Future<AiReportResult> _buildReportFuture() => _future.then((r) => fetchAiReport(
-        roster: r.roster,
-        profile: r.profile,
-        stateNote: _stateNote.isEmpty ? null : _stateNote,
-      ));
+  Future<AiReportResult> _buildReportFuture() => _future.then(
+    (r) => fetchAiReport(
+      roster: r.roster,
+      profile: r.profile,
+      stateNote: _stateNote.isEmpty ? null : _stateNote,
+    ),
+  );
 
   Future<void> _requestReport() async {
     final request = _buildReportFuture();
@@ -186,7 +211,7 @@ class _AiReportScreenState extends State<AiReportScreen> {
       if (!mounted) return;
       setState(() => _requesting = false);
       final target = _insightKey.currentContext;
-      if (target != null) {
+      if (target != null && target.mounted) {
         await Scrollable.ensureVisible(
           target,
           duration: const Duration(milliseconds: 420),
@@ -203,19 +228,20 @@ class _AiReportScreenState extends State<AiReportScreen> {
     }
   }
 
-  String get _periodTitle => const ['이번 주 리듬', '최근 한 달 리듬', '근무 루틴별 리듬'][_segment];
+  String get _periodTitle =>
+      const ['이번 주 리듬', '최근 한 달 리듬', '근무 루틴별 리듬'][_segment];
 
   String get _periodDescription => const [
-        '최근 7일 · 근무와 수면의 연결',
-        '최근 14일 · 누적 수면 부족과 회복 추세',
-        '오프를 제외한 근무일 · 교대 유형별 차이',
-      ][_segment];
+    '최근 7일 · 근무와 수면의 연결',
+    '최근 14일 · 누적 수면 부족과 회복 추세',
+    '오프를 제외한 근무일 · 교대 유형별 차이',
+  ][_segment];
 
   String get _periodSummary => const [
-        '이번 주는 나이트 전후 수면 시작 시각의 흔들림이 가장 컸어요.',
-        '2주 동안 수면 부족이 누적됐지만 오프 다음 날에는 회복되는 흐름이 보여요.',
-        '나이트 근무일의 취침 지연이 데이·이브닝보다 크고 회복까지 더 오래 걸려요.',
-      ][_segment];
+    '이번 주는 나이트 전후 수면 시작 시각의 흔들림이 가장 컸어요.',
+    '2주 동안 수면 부족이 누적됐지만 오프 다음 날에는 회복되는 흐름이 보여요.',
+    '나이트 근무일의 취침 지연이 데이·이브닝보다 크고 회복까지 더 오래 걸려요.',
+  ][_segment];
 
   @override
   Widget build(BuildContext context) {
@@ -238,21 +264,30 @@ class _AiReportScreenState extends State<AiReportScreen> {
                 children: [
                   Text(_periodTitle, style: AppTypography.subtitle02),
                   const SizedBox(height: 4),
-                  Text(_periodDescription,
-                      style: AppTypography.caption02
-                          .copyWith(color: AppColors.textTertiary)),
+                  Text(
+                    _periodDescription,
+                    style: AppTypography.caption02.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.lg),
                   FutureBuilder<AlertnessResult>(
                     future: _future,
                     builder: (context, snapshot) {
                       final result = snapshot.data;
                       if (snapshot.hasError) {
-                        return Text('리듬 계산에 실패했어요\n${snapshot.error}',
-                            style: AppTypography.caption01.copyWith(color: AppColors.error01));
+                        return Text(
+                          '리듬 계산에 실패했어요\n${snapshot.error}',
+                          style: AppTypography.caption01.copyWith(
+                            color: AppColors.error01,
+                          ),
+                        );
                       }
                       if (result == null) {
                         return const SizedBox(
-                            height: 160, child: Center(child: CircularProgressIndicator()));
+                          height: 160,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
                       }
                       final data = _buildRows(result, _segment);
                       return Column(
@@ -261,9 +296,13 @@ class _AiReportScreenState extends State<AiReportScreen> {
                           const ActogramTimeAxis(),
                           const SizedBox(height: 2),
                           ActogramView(rows: data.rows),
-                          if (data.calloutDate != null && data.calloutGapMin != null) ...[
+                          if (data.calloutDate != null &&
+                              data.calloutGapMin != null) ...[
                             const SizedBox(height: AppSpacing.sm),
-                            _GapCallout(date: data.calloutDate!, gapMin: data.calloutGapMin!),
+                            _GapCallout(
+                              date: data.calloutDate!,
+                              gapMin: data.calloutGapMin!,
+                            ),
                           ],
                         ],
                       );
@@ -277,7 +316,10 @@ class _AiReportScreenState extends State<AiReportScreen> {
                       _LegendDot(color: AppColors.gray700, label: '수면'),
                       _LegendDot(color: AppColors.primary300, label: '근무(광노출)'),
                       _LegendDot(color: AppColors.primary900, label: '예측 DLMO'),
-                      _LegendDot(color: AppColors.information01, label: '목표 취침'),
+                      _LegendDot(
+                        color: AppColors.information01,
+                        label: '목표 취침',
+                      ),
                       _LegendDot(color: AppColors.error01, label: '컨디션 저하 구간'),
                     ],
                   ),
@@ -291,8 +333,10 @@ class _AiReportScreenState extends State<AiReportScreen> {
                     ),
                     child: Text(
                       _periodSummary,
-                      style: AppTypography.caption01
-                          .copyWith(color: AppColors.textSecondary, height: 1.45),
+                      style: AppTypography.caption01.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.45,
+                      ),
                     ),
                   ),
                 ],
@@ -301,9 +345,12 @@ class _AiReportScreenState extends State<AiReportScreen> {
             const SizedBox(height: AppSpacing.xxl),
             Text('지금 상태를 알려주세요', style: AppTypography.subtitle03),
             const SizedBox(height: 4),
-            Text('적어주시면 계산 결과와 함께 읽고 오늘 할 일을 골라드려요',
-                style: AppTypography.caption02
-                    .copyWith(color: AppColors.textTertiary)),
+            Text(
+              '적어주시면 계산 결과와 함께 읽고 오늘 할 일을 골라드려요',
+              style: AppTypography.caption02.copyWith(
+                color: AppColors.textTertiary,
+              ),
+            ),
             const SizedBox(height: AppSpacing.sm),
             Wrap(
               spacing: AppSpacing.xs,
@@ -327,10 +374,12 @@ class _AiReportScreenState extends State<AiReportScreen> {
               maxLines: 4,
               decoration: InputDecoration(
                 hintText: '직접 적기 (예: 어제 나이트 끝나고 3시간밖에 못 잤어요)',
-                hintStyle: AppTypography.caption01
-                    .copyWith(color: AppColors.textPlaceholder),
+                hintStyle: AppTypography.caption01.copyWith(
+                  color: AppColors.textPlaceholder,
+                ),
                 border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
             SizedBox(
@@ -342,7 +391,8 @@ class _AiReportScreenState extends State<AiReportScreen> {
                   foregroundColor: AppColors.gray900,
                   disabledBackgroundColor: AppColors.gray100,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
                 onPressed: AppState.instance.aiConsent && !_requesting
                     ? _requestReport
@@ -369,22 +419,34 @@ class _AiReportScreenState extends State<AiReportScreen> {
             if (!AppState.instance.aiConsent)
               const _AiConsentNotice()
             else
-            FutureBuilder<AiReportResult>(
-              future: _reportFuture,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Text('인사이트를 불러오지 못했어요',
-                      style: AppTypography.body02.copyWith(color: AppColors.error01));
-                }
-                final result = snapshot.data;
-                if (result == null) {
-                  return const SizedBox(
-                      height: 20, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
-                }
-                return Text(result.comment,
-                    style: AppTypography.body02.copyWith(color: AppColors.textSecondary));
-              },
-            ),
+              FutureBuilder<AiReportResult>(
+                future: _reportFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Text(
+                      '인사이트를 불러오지 못했어요',
+                      style: AppTypography.body02.copyWith(
+                        color: AppColors.error01,
+                      ),
+                    );
+                  }
+                  final result = snapshot.data;
+                  if (result == null) {
+                    return const SizedBox(
+                      height: 20,
+                      child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    );
+                  }
+                  return Text(
+                    result.comment,
+                    style: AppTypography.body02.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  );
+                },
+              ),
             const SizedBox(height: AppSpacing.sm),
             _TinyEffectLine('밝은 빛 노출 · DLMO 평균 25분 지연'),
             _TinyEffectLine('퇴근길 차광 · 수면 진입 보호 효과 확인'),
@@ -396,7 +458,11 @@ class _AiReportScreenState extends State<AiReportScreen> {
 }
 
 class _SegmentedControl extends StatelessWidget {
-  const _SegmentedControl({required this.labels, required this.index, required this.onChanged});
+  const _SegmentedControl({
+    required this.labels,
+    required this.index,
+    required this.onChanged,
+  });
   final List<String> labels;
   final int index;
   final ValueChanged<int> onChanged;
@@ -418,7 +484,9 @@ class _SegmentedControl extends StatelessWidget {
                 onTap: () => onChanged(i),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: i == index ? AppColors.grayWhite : Colors.transparent,
+                    color: i == index
+                        ? AppColors.grayWhite
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: i == index
                         ? [
@@ -431,14 +499,18 @@ class _SegmentedControl extends StatelessWidget {
                         : null,
                   ),
                   alignment: Alignment.center,
-                  child: Text(labels[i],
-                      style: (i == index
-                              ? AppTypography.subtitle04
-                              : AppTypography.body02)
-                          .copyWith(
+                  child: Text(
+                    labels[i],
+                    style:
+                        (i == index
+                                ? AppTypography.subtitle04
+                                : AppTypography.body02)
+                            .copyWith(
                               color: i == index
                                   ? AppColors.textPrimary
-                                  : AppColors.textTertiary)),
+                                  : AppColors.textTertiary,
+                            ),
+                  ),
                 ),
               ),
             ),
@@ -461,12 +533,18 @@ class _GapCallout extends StatelessWidget {
     final abs = gapMin.abs();
     return Row(
       children: [
-        Icon(Icons.info_outline_rounded, size: 14, color: AppColors.information01),
+        Icon(
+          Icons.info_outline_rounded,
+          size: 14,
+          color: AppColors.information01,
+        ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             '${date.month}/${date.day} · 목표 취침보다 $abs분 ${isLate ? '늦게' : '일찍'} 잠들었어요',
-            style: AppTypography.caption02.copyWith(color: AppColors.textTertiary),
+            style: AppTypography.caption02.copyWith(
+              color: AppColors.textTertiary,
+            ),
           ),
         ),
       ],
@@ -485,10 +563,17 @@ class _LegendDot extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-            width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 6),
-        Text(label,
-            style: AppTypography.caption02.copyWith(color: AppColors.textTertiary)),
+        Text(
+          label,
+          style: AppTypography.caption02.copyWith(
+            color: AppColors.textTertiary,
+          ),
+        ),
       ],
     );
   }
@@ -508,11 +593,17 @@ class _TinyEffectLine extends StatelessWidget {
             width: 4,
             height: 4,
             decoration: const BoxDecoration(
-                color: AppColors.textPlaceholder, shape: BoxShape.circle),
+              color: AppColors.textPlaceholder,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: 8),
-          Text(text,
-              style: AppTypography.caption03.copyWith(color: AppColors.textPlaceholder)),
+          Text(
+            text,
+            style: AppTypography.caption03.copyWith(
+              color: AppColors.textPlaceholder,
+            ),
+          ),
         ],
       ),
     );
@@ -536,17 +627,22 @@ class _StateChip extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
           color: selected ? AppColors.primary500 : AppColors.grayWhite,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: selected ? AppColors.primary500 : AppColors.gray100),
+            color: selected ? AppColors.primary500 : AppColors.gray100,
+          ),
         ),
-        child: Text(label,
-            style: AppTypography.caption01.copyWith(
-              color: selected ? AppColors.gray900 : AppColors.textSecondary,
-            )),
+        child: Text(
+          label,
+          style: AppTypography.caption01.copyWith(
+            color: selected ? AppColors.gray900 : AppColors.textSecondary,
+          ),
+        ),
       ),
     );
   }
@@ -572,8 +668,9 @@ class _AiConsentNotice extends StatelessWidget {
           Text(
             '리포트 문구를 만들려면 근무·수면 요약을 Google(Gemini)로 보내야 해요. '
             '설정 > AI 리포트에서 동의하면 바로 사용할 수 있어요.',
-            style: AppTypography.caption01
-                .copyWith(color: AppColors.textSecondary),
+            style: AppTypography.caption01.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),

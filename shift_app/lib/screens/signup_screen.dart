@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../state/app_state.dart';
+
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -9,13 +9,8 @@ import 'login_screen.dart';
 import 'onboarding_flow.dart';
 import 'privacy_policy_screen.dart';
 
-/// 회원가입. 필드는 Drift `user_profile` 테이블 초안의 계정 컬럼
-/// (`name`/`email`/`password_hash`)을 그대로 따른다
-/// (`docs/SHIFT_프론트엔드_구현체크리스트.md` §5).
-///
-/// ⚠️ 실제 인증 서버가 없다 — `AppState.signUp()`이 메모리에 평문으로만
-/// 들고 있는 데모 구현이다. 진짜 계정 시스템이 붙기 전까지 보안 기능으로
-/// 오해하면 안 된다.
+/// Supabase Auth 이메일 회원가입 화면. 이름과 동의 내역은 Auth metadata로
+/// 전달되고 DB trigger가 `profiles`에 사용자 소유 행을 생성한다.
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -81,7 +76,9 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('AuthException: ', ''))),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('AuthException: ', '')),
+        ),
       );
     }
   }
@@ -98,13 +95,18 @@ class _SignupScreenState extends State<SignupScreen> {
             children: [
               Text('슬립레디와 함께 리듬을 관리해요', style: AppTypography.heading04),
               const SizedBox(height: AppSpacing.sm),
-              Text('몇 가지만 알려주시면 바로 시작할 수 있어요',
-                  style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
+              Text(
+                '몇 가지만 알려주시면 바로 시작할 수 있어요',
+                style: AppTypography.body02.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: AppSpacing.xxl),
               AuthField(
                 label: '이름',
                 controller: _nameController,
-                validator: (v) => (v == null || v.trim().isEmpty) ? '이름을 입력해주세요' : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? '이름을 입력해주세요' : null,
               ),
               const SizedBox(height: AppSpacing.md),
               AuthField(
@@ -119,14 +121,16 @@ class _SignupScreenState extends State<SignupScreen> {
                 label: '비밀번호',
                 controller: _passwordController,
                 obscureText: true,
-                validator: (v) => (v == null || v.length < 4) ? '4자 이상 입력해주세요' : null,
+                validator: (v) =>
+                    (v == null || v.length < 6) ? '6자 이상 입력해주세요' : null,
               ),
               const SizedBox(height: AppSpacing.md),
               AuthField(
                 label: '비밀번호 확인',
                 controller: _confirmController,
                 obscureText: true,
-                validator: (v) => v != _passwordController.text ? '비밀번호가 일치하지 않아요' : null,
+                validator: (v) =>
+                    v != _passwordController.text ? '비밀번호가 일치하지 않아요' : null,
               ),
               const SizedBox(height: AppSpacing.xxl),
               _ConsentTile(
@@ -135,14 +139,17 @@ class _SignupScreenState extends State<SignupScreen> {
                 label: '[필수] 개인정보 수집·이용에 동의합니다',
                 sub: '근무표·수면 정보를 리듬 계산에 사용해요',
                 onOpenPolicy: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyScreen(),
+                  ),
                 ),
               ),
               _ConsentTile(
                 value: _aiConsent,
                 onChanged: (v) => setState(() => _aiConsent = v),
                 label: '[선택] AI 리포트를 위한 국외 이전에 동의합니다',
-                sub: '리포트를 열 때 근무·수면 요약이 Google(Gemini)로 전송돼요. '
+                sub:
+                    '리포트를 열 때 근무·수면 요약이 Google(Gemini)로 전송돼요. '
                     '동의하지 않아도 넛지는 그대로 받을 수 있어요',
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -154,7 +161,9 @@ class _SignupScreenState extends State<SignupScreen> {
                     backgroundColor: AppColors.primary500,
                     foregroundColor: AppColors.gray900,
                     disabledBackgroundColor: AppColors.gray100,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: _privacyConsent && !_loading ? _submit : null,
                   child: _loading
@@ -170,9 +179,14 @@ class _SignupScreenState extends State<SignupScreen> {
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const LoginScreen())),
-                  child: Text('이미 계정이 있으신가요? 로그인',
-                      style: AppTypography.caption01.copyWith(color: AppColors.textSecondary)),
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  ),
+                  child: Text(
+                    '이미 계정이 있으신가요? 로그인',
+                    style: AppTypography.caption01.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -222,18 +236,24 @@ class _ConsentTile extends StatelessWidget {
                     child: Text(label, style: AppTypography.body02),
                   ),
                   const SizedBox(height: 2),
-                  Text(sub,
-                      style: AppTypography.caption02
-                          .copyWith(color: AppColors.textTertiary)),
+                  Text(
+                    sub,
+                    style: AppTypography.caption02.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
                 ],
               ),
             ),
             if (onOpenPolicy != null)
               TextButton(
                 onPressed: onOpenPolicy,
-                child: Text('전문',
-                    style: AppTypography.caption01
-                        .copyWith(color: AppColors.textSecondary)),
+                child: Text(
+                  '전문',
+                  style: AppTypography.caption01.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ),
           ],
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../state/app_state.dart';
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
@@ -9,12 +10,8 @@ import 'onboarding_flow.dart';
 import 'root_shell.dart';
 import 'signup_screen.dart';
 
-/// 로그인 — 앱 최초 화면(`main.dart`). ⚠️ 실제 인증 서버가 없다 — 같은
-/// 세션에서 `SignupScreen`으로 만든 계정과 이메일·비밀번호가 일치하는지만
-/// `AppState.tryLogin()`으로 메모리에서 대조한다(`AppState` docstring 참고).
-/// 계정이 없어도 "게스트로 계속하기"로 온보딩까지 그대로 진입 가능 —
-/// 로그인을 강제해서 진입 장벽을 만들지 않는다는 게 다른 화면들의
-/// 기존 원칙(권한 화면의 "나중에 하기" 등)과 일관됨.
+/// Supabase Auth 이메일 로그인 화면. 계정이 없어도 "게스트로 계속하기"로
+/// 온보딩에 진입할 수 있으며, 로그인 시 서버 프로필과 일일 기록을 복원한다.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -56,7 +53,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString().replaceFirst('AuthException: ', ''))),
+        SnackBar(
+          content: Text(error.toString().replaceFirst('AuthException: ', '')),
+        ),
       );
     }
   }
@@ -81,74 +80,100 @@ class _LoginScreenState extends State<LoginScreen> {
               constraints: const BoxConstraints(maxWidth: 460),
               child: ListView(
                 padding: EdgeInsets.symmetric(
-                  horizontal: (MediaQuery.sizeOf(context).width * 0.08)
-                      .clamp(AppSpacing.xxl, 40),
+                  horizontal: (MediaQuery.sizeOf(context).width * 0.08).clamp(
+                    AppSpacing.xxl,
+                    40,
+                  ),
                   vertical: AppSpacing.lg,
                 ),
                 children: [
-              const SizedBox(height: 56),
-              Text('슬립레디', style: AppTypography.heading01.copyWith(color: AppColors.primary900)),
-              const SizedBox(height: AppSpacing.sm),
-              Text('교대근무자를 위한 생체리듬 코치',
-                  style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
-              const SizedBox(height: 44),
-              AuthField(
-                label: '이메일',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) => (v == null || v.isEmpty) ? '이메일을 입력해주세요' : null,
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              AuthField(
-                label: '비밀번호',
-                controller: _passwordController,
-                obscureText: true,
-                validator: (v) => (v == null || v.isEmpty) ? '비밀번호를 입력해주세요' : null,
-              ),
-              const SizedBox(height: 36),
-              SizedBox(
-                width: double.infinity,
-                height: 60,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary500,
-                    foregroundColor: AppColors.gray900,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  const SizedBox(height: 56),
+                  Text(
+                    '슬립레디',
+                    style: AppTypography.heading01.copyWith(
+                      color: AppColors.primary900,
+                    ),
                   ),
-                  onPressed: _loading ? null : _submit,
-                  child: _loading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text('로그인', style: AppTypography.button03),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              SizedBox(
-                width: double.infinity,
-                height: 60,
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.gray200),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    '교대근무자를 위한 생체리듬 코치',
+                    style: AppTypography.body02.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                  onPressed: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const SignupScreen())),
-                  child: Text('회원가입',
-                      style: AppTypography.button03.copyWith(color: AppColors.textPrimary)),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Center(
-                child: TextButton(
-                  onPressed: _continueAsGuest,
-                  child: Text('게스트로 계속하기',
-                      style: AppTypography.caption01.copyWith(color: AppColors.textTertiary)),
-                ),
-              ),
+                  const SizedBox(height: 44),
+                  AuthField(
+                    label: '이메일',
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? '이메일을 입력해주세요' : null,
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  AuthField(
+                    label: '비밀번호',
+                    controller: _passwordController,
+                    obscureText: true,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? '비밀번호를 입력해주세요' : null,
+                  ),
+                  const SizedBox(height: 36),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary500,
+                        foregroundColor: AppColors.gray900,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                      onPressed: _loading ? null : _submit,
+                      child: _loading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text('로그인', style: AppTypography.button03),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 60,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.gray200),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SignupScreen()),
+                      ),
+                      child: Text(
+                        '회원가입',
+                        style: AppTypography.button03.copyWith(
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Center(
+                    child: TextButton(
+                      onPressed: _continueAsGuest,
+                      child: Text(
+                        '게스트로 계속하기',
+                        style: AppTypography.caption01.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

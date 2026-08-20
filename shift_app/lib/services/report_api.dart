@@ -8,9 +8,11 @@
 // 교체해야 한다.
 import 'dart:convert';
 import 'dart:math' as math;
+
 import 'package:http/http.dart' as http;
 import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
+
 import '../engine/gap_service.dart';
 import '../state/app_state.dart';
 
@@ -20,7 +22,8 @@ import '../state/app_state.dart';
 // 형식으로 401이 나서 표준 generateContent로 교체했다. 다만 이 함수는
 // 아직 gapMinutes/sleepDebtMin/shiftPattern 3개만 읽는다 — 클라이언트가
 // 같이 보내는 skinRoutineContext/stateNote 등은 아직 프롬프트에 안 실림.
-const _reportUrl = 'https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report';
+const _reportUrl =
+    'https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report';
 const _reportWindowDays = 14;
 
 class AiReportResult {
@@ -52,8 +55,19 @@ String _clockLabel(double hours) {
 
 bool _isActionable(String comment) {
   const actionWords = [
-    '해보세요', '해주세요', '줄여', '낮추', '피해', '멈추',
-    '준비', '착용', '바르', '세안', '보습', '쉬어', '누워',
+    '해보세요',
+    '해주세요',
+    '줄여',
+    '낮추',
+    '피해',
+    '멈추',
+    '준비',
+    '착용',
+    '바르',
+    '세안',
+    '보습',
+    '쉬어',
+    '누워',
   ];
   return actionWords.any(comment.contains);
 }
@@ -80,8 +94,8 @@ String _actionFallback({
   final sleepLead = deficit >= 60
       ? '최근 실제 수면이 권장량보다 하루 평균 $deficitLabel 부족해요. 오늘은 목표 취침 40분 전부터 할 일을 멈추고 수면 준비를 시작하세요.'
       : upcomingNightCount > 0
-          ? '앞으로 2주 나이트 $upcomingNightCount회에 대비해 첫 나이트 전 90분 낮잠을 확보하고 카페인은 근무 초반에만 드세요.'
-          : '최근 수면량은 비교적 안정적이지만 취침 시각을 일정하게 지키는 것이 우선이에요. 오늘도 목표 취침 30분 전부터 밝은 빛을 줄이세요.';
+      ? '앞으로 2주 나이트 $upcomingNightCount회에 대비해 첫 나이트 전 90분 낮잠을 확보하고 카페인은 근무 초반에만 드세요.'
+      : '최근 수면량은 비교적 안정적이지만 취침 시각을 일정하게 지키는 것이 우선이에요. 오늘도 목표 취침 30분 전부터 밝은 빛을 줄이세요.';
 
   late final List<String> options;
   if (note.contains('턱') || note.contains('귀')) {
@@ -90,12 +104,17 @@ String _actionFallback({
       '나이트 후 세안이 늦어지면 마스크에 닿은 턱 주변 자극이 길어져요. 퇴근 직후 30초만 세안하고, 트러블 부위에는 유분감 많은 제품을 겹치지 마세요.',
       '귀와 턱의 반복 자극을 확인하려면 오늘은 제품을 새로 더하지 말고 휴대폰·이어폰을 닦아주세요. 3일간 같은 위치에 생기는지도 함께 기록해보세요.',
     ];
-  } else if (note.contains('건조') || note.contains('당김') || note.contains('각질')) {
+  } else if (note.contains('건조') ||
+      note.contains('당김') ||
+      note.contains('각질')) {
     options = [
       '장시간 마스크와 수면 부족 뒤 당김이 커졌다면 수분 증발 영향 가능성이 있어요. 세안 직후 3분 안에 가벼운 보습제를 두 번 얇게 나눠 발라보세요.',
       '건조·각질이 있는 날은 스크럽보다 세안 온도와 시간이 더 중요해요. 미지근한 물로 30초 이내 세안하고 당기는 부위에만 크림을 덧발라주세요.',
     ];
-  } else if (note.contains('유분') || note.contains('번들') || note.contains('면포') || note.contains('여드름')) {
+  } else if (note.contains('유분') ||
+      note.contains('번들') ||
+      note.contains('면포') ||
+      note.contains('여드름')) {
     options = [
       '유분과 면포가 고민이라면 보습을 더 쌓기보다 무거운 오일·크림 단계를 줄여보세요. 세안은 하루 두 번을 넘기지 말고 가벼운 로션 한 단계만 남겨주세요.',
       '번들거림 때문에 반복 세안하면 오히려 자극이 늘 수 있어요. 오늘은 과세안을 멈추고 턱·이마처럼 막히는 부위에는 유분감 높은 제품을 겹치지 마세요.',
@@ -132,7 +151,8 @@ String _actionFallback({
     ];
   }
   final selected = options[math.Random().nextInt(options.length)];
-  final hasSkinSignal = note.contains('피부') ||
+  final hasSkinSignal =
+      note.contains('피부') ||
       note.contains('트러블') ||
       note.contains('턱') ||
       note.contains('귀') ||
@@ -167,13 +187,12 @@ Future<AiReportResult> fetchAiReport({
   final personalState = AppState.instance;
   final recentCheckIns = personalState.recentCheckIns(days: 14);
   final repeatedStateCounts = {
-    for (final tag in {
-      for (final entry in recentCheckIns) ...entry.tags,
-    })
+    for (final tag in {for (final entry in recentCheckIns) ...entry.tags})
       tag: recentCheckIns.where((entry) => entry.tags.contains(tag)).length,
   };
   final effectiveStateNote = [
-    if (stateNote != null && stateNote.trim().isNotEmpty) '오늘: ${stateNote.trim()}',
+    if (stateNote != null && stateNote.trim().isNotEmpty)
+      '오늘: ${stateNote.trim()}',
     '피부: ${personalState.skinType}',
     if (personalState.skinConcerns.isNotEmpty)
       '평소 고민: ${personalState.skinConcerns.join('/')}',
@@ -182,7 +201,9 @@ Future<AiReportResult> fetchAiReport({
     if (repeatedStateCounts.isNotEmpty)
       '최근 14일 반복: ${repeatedStateCounts.entries.map((e) => '${e.key} ${e.value}회').join(', ')}',
   ].join('; ');
-  final windowDays = roster.length < _reportWindowDays ? roster.length : _reportWindowDays;
+  final windowDays = roster.length < _reportWindowDays
+      ? roster.length
+      : _reportWindowDays;
 
   final gapMinutes = gapMinutesSeries(
     roster: roster,
@@ -197,10 +218,12 @@ Future<AiReportResult> fetchAiReport({
   final sleepDays = sleepDurationSeries(roster: roster, windowDays: windowDays);
   final averageTargetMin = sleepDays.isEmpty
       ? 0
-      : sleepDays.fold<int>(0, (sum, d) => sum + d.targetMinutes) ~/ sleepDays.length;
+      : sleepDays.fold<int>(0, (sum, d) => sum + d.targetMinutes) ~/
+            sleepDays.length;
   final averageActualMin = sleepDays.isEmpty
       ? 0
-      : sleepDays.fold<int>(0, (sum, d) => sum + d.actualMinutes) ~/ sleepDays.length;
+      : sleepDays.fold<int>(0, (sum, d) => sum + d.actualMinutes) ~/
+            sleepDays.length;
   final totalDeficitMin = sleepDays.fold<int>(
     0,
     (sum, d) => sum + (d.deficitMinutes > 0 ? d.deficitMinutes : 0),
@@ -217,8 +240,7 @@ Future<AiReportResult> fetchAiReport({
       ? 0
       : sleepDays.fold<int>(
               0,
-              (sum, d) => sum +
-                  (d.deficitMinutes > 0 ? d.deficitMinutes : 0),
+              (sum, d) => sum + (d.deficitMinutes > 0 ? d.deficitMinutes : 0),
             ) ~/
             sleepDays.length;
   String? recommendedBedtime;
@@ -264,7 +286,8 @@ Future<AiReportResult> fetchAiReport({
         },
         'todayShift': roster.isEmpty ? 'unknown' : roster.first.name,
         'upcomingNightCount': upcomingNightCount,
-        'recoveryMode': sleepDays.isNotEmpty && sleepDays.first.deficitMinutes >= 60,
+        'recoveryMode':
+            sleepDays.isNotEmpty && sleepDays.first.deficitMinutes >= 60,
         'availableProductSlots': [
           '저자극 클렌저',
           '가벼운 진정 미스트',
@@ -277,13 +300,14 @@ Future<AiReportResult> fetchAiReport({
           'dryOrTight': '세안 직후 3분 이내 보습을 얇게 두 번 적용한다',
           'oilyOrComedonal': '보습을 추가하지 말고 오일·무거운 크림과 과세안을 줄인다',
           'redOrSensitive': '레티놀·각질제거제·고농도 활성 성분을 48시간 중단한다',
-          'noSkinSignal': '피부 상태를 추측하지 말고 근무 중 마찰·퇴근길 자외선처럼 데이터로 확인 가능한 행동만 제안한다',
+          'noSkinSignal':
+              '피부 상태를 추측하지 말고 근무 중 마찰·퇴근길 자외선처럼 데이터로 확인 가능한 행동만 제안한다',
         },
       },
       'variation': {
         'focus': variationFocus,
         'requestId': DateTime.now().microsecondsSinceEpoch.toString(),
-        if (previousComment != null) 'avoidPreviousAnswer': previousComment,
+        'avoidPreviousAnswer': ?previousComment,
       },
       'personalizationBrief': {
         'recentDailyCheckIns': [
@@ -302,8 +326,7 @@ Future<AiReportResult> fetchAiReport({
         'averageActualSleepMin': averageActualMin,
         'averageDailyDeficitMin': averageDailyDeficitMin,
         'totalDeficitMin': totalDeficitMin,
-        if (recommendedBedtime != null)
-          'recommendedBedtime': recommendedBedtime,
+        'recommendedBedtime': ?recommendedBedtime,
         'userState': effectiveStateNote,
       },
       'responseInstruction':
@@ -331,7 +354,8 @@ Future<AiReportResult> fetchAiReport({
   }
   final json = jsonDecode(res.body) as Map<String, dynamic>;
   final generated = _briefComment(json['comment'] as String? ?? '');
-  final comment = _isActionable(generated) &&
+  final comment =
+      _isActionable(generated) &&
           !_looksLikeRepeatedTemplate(generated, previousComment)
       ? generated
       : _actionFallback(

@@ -130,10 +130,9 @@ AI 인사이트는 Supabase Edge Function을 통해 Gemini 응답을 생성합�
 POST https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report
 ```
 
-(2026-08-20: 원래 프로젝트 오너 초대가 막혀 새 프로젝트로 옮김. 함수
-소스는 `shift_app/supabase/functions/report/index.ts`. 지금은
-`gapMinutes`/`sleepDebtMin`/`shiftPattern` 3개만 프롬프트에 반영되고,
-클라이언트가 같이 보내는 피부 프로필·상태 메모는 아직 안 실린다.)
+(2026-08-21: 새 프로젝트로 이전 완료. 함수 소스는
+`shift_app/supabase/functions/report/index.ts`이며 수면 요약, 개인화 브리프,
+피부 프로필, 최근 상태 메모와 응답 지침을 함께 Gemini에 전달합니다.)
 
 회원가입 또는 설정에서 AI 인사이트 사용에 동의해야 외부 AI 요청을
 보냅니다. 네트워크 요청에 실패하면 앱 내부의 개인화 폴백 문구를 사용합니다.
