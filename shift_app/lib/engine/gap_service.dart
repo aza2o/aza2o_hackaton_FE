@@ -62,6 +62,19 @@ List<SleepDurationDay> sleepDurationSeries({
   int windowDays = 14,
 }) {
   final n = roster.length < windowDays ? roster.length : windowDays;
+  return sleepDurationSeriesWithActualMinutes(
+    roster: roster.take(n).toList(),
+    actualMinutes: [for (var i = 0; i < n; i++) _demoDurationFor(roster[i], i)],
+  );
+}
+
+/// 실제 웨어러블 수면시간으로 권장량과 부족분을 계산한다. 목업 생성은
+/// [sleepDurationSeries]에만 남겨 일반 계정 데이터와 섞이지 않게 한다.
+List<SleepDurationDay> sleepDurationSeriesWithActualMinutes({
+  required List<ShiftType> roster,
+  required List<int> actualMinutes,
+}) {
+  final n = math.min(roster.length, actualMinutes.length);
   var carriedDebt = 0;
   final out = <SleepDurationDay>[];
 
@@ -72,7 +85,7 @@ List<SleepDurationDay> sleepDurationSeries({
     };
     final recovery = (carriedDebt * 0.25).round().clamp(0, 45);
     final target = baseTarget + recovery;
-    final actual = _demoDurationFor(roster[i], i);
+    final actual = actualMinutes[i];
     final day = SleepDurationDay(targetMinutes: target, actualMinutes: actual);
     out.add(day);
 

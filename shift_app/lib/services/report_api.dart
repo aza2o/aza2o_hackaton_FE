@@ -26,6 +26,10 @@ import '../state/app_state.dart';
 const _reportUrl =
     'https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report';
 const _reportWindowDays = 14;
+const minimumSleepRecordsForInsight = 3;
+const insufficientSleepDataMessage =
+    '수면 기록이 아직 부족해 개인 수면 패턴을 분석하기 어려워요. '
+    '웨어러블을 연동하거나 3일 이상 기록하면 근무 일정과 함께 맞춤 인사이트를 알려드릴게요.';
 
 class AiReportResult {
   const AiReportResult(this.comment);
@@ -94,6 +98,7 @@ String _actionFallback({
   required int averageTargetMin,
   required int averageActualMin,
   required int upcomingNightCount,
+  required bool isDemoAccount,
   String? stateNote,
 }) {
   final deficit = averageTargetMin - averageActualMin;
@@ -101,8 +106,9 @@ String _actionFallback({
   final deficitLabel = deficit >= 60
       ? '${deficit ~/ 60}시간 ${deficit % 60}분'
       : '$deficit분';
+  final sleepSourceLabel = isDemoAccount ? '최근 14일 데모 수면 기록' : '최근 동기화 수면 기록';
   final sleepLead = deficit >= 60
-      ? '최근 14일 데모 수면 기록에서 권장량보다 하루 평균 $deficitLabel 부족해요. 오늘은 목표 취침 40분 전부터 할 일을 멈추고 수면 준비를 시작하세요.'
+      ? '$sleepSourceLabel에서 권장량보다 하루 평균 $deficitLabel 부족해요. 오늘은 목표 취침 40분 전부터 할 일을 멈추고 수면 준비를 시작하세요.'
       : upcomingNightCount > 0
       ? '앞으로 2주 나이트 $upcomingNightCount회에 대비해 첫 나이트 전 90분 낮잠을 확보하고 카페인은 근무 초반에만 드세요.'
       : '최근 수면량은 비교적 안정적이지만 취침 시각을 일정하게 지키는 것이 우선이에요. 오늘도 목표 취침 30분 전부터 밝은 빛을 줄이세요.';
@@ -143,7 +149,7 @@ String _actionFallback({
         ? '앞으로 2주 나이트 $upcomingNightCount회까지 고려하면'
         : '이번 근무 흐름에서는';
     options = [
-      '최근 14일 데모 수면 기록에서 권장량보다 평균 $deficitLabel 짧아요. $nightContext 오늘은 알림이 울리면 샤워를 10분 안에 끝내고 목표 취침을 30분 앞당겨보세요.',
+      '$sleepSourceLabel에서 권장량보다 평균 $deficitLabel 짧아요. $nightContext 오늘은 알림이 울리면 샤워를 10분 안에 끝내고 목표 취침을 30분 앞당겨보세요.',
       '평균 $deficitLabel의 수면 부족이 누적되고 있어요. $nightContext 퇴근 후 미룰 일 한 가지만 내일로 넘기고 바로 수면 준비를 시작해보세요.',
       '하루 평균 $deficitLabel이 부족해 회복 시간을 먼저 확보해야 해요. 피부 상태 정보가 없으므로 제품을 임의 추천하지 않고, 오늘은 나이트 퇴근길 선케어 여부만 챙겨주세요.',
     ];
@@ -195,6 +201,13 @@ Future<AiReportResult> fetchAiReport({
   String? previousComment,
 }) async {
   final personalState = AppState.instance;
+  final isDemoAccount = personalState.isDemoAccount;
+  final realSleepMetrics = personalState.syncedHealthMetrics.toList()
+    ..sort((a, b) => a.sleepEnd.compareTo(b.sleepEnd));
+  if (!isDemoAccount &&
+      realSleepMetrics.length < minimumSleepRecordsForInsight) {
+    return const AiReportResult(insufficientSleepDataMessage);
+  }
   final recentCheckIns = personalState.recentCheckIns(days: 14);
   final repeatedStateCounts = {
     for (final tag in {for (final entry in recentCheckIns) ...entry.tags})
@@ -215,16 +228,45 @@ Future<AiReportResult> fetchAiReport({
       ? roster.length
       : _reportWindowDays;
 
-  final gapMinutes = gapMinutesSeries(
-    roster: roster,
-    shiftTimings: profile.shiftTimings,
-    commuteMinutes: profile.commuteMinutes,
-    windowDays: windowDays,
-  );
+  final gapMinutes = isDemoAccount
+      ? gapMinutesSeries(
+          roster: roster,
+          shiftTimings: profile.shiftTimings,
+          commuteMinutes: profile.commuteMinutes,
+          windowDays: windowDays,
+        )
+      : <int>[];
 
-  final sessions = demoSessionsForWindow(windowDays);
+  final recentRealMetrics = realSleepMetrics.length <= windowDays
+      ? realSleepMetrics
+      : realSleepMetrics.sublist(realSleepMetrics.length - windowDays);
+  final anchor =
+      personalState.rosterStartDate ??
+      (recentRealMetrics.isEmpty
+          ? DateTime.now()
+          : DateTime(
+              recentRealMetrics.first.date.year,
+              recentRealMetrics.first.date.month,
+              recentRealMetrics.first.date.day,
+            ));
+  final sessions = isDemoAccount
+      ? demoSessionsForWindow(windowDays)
+      : [
+          for (final metric in recentRealMetrics)
+            SleepSession(
+              metric.sleepStart.difference(anchor).inMinutes / 60.0,
+              metric.sleepEnd.difference(anchor).inMinutes / 60.0,
+            ),
+        ];
   final shiftPattern = roster.take(windowDays).map((s) => s.name).toList();
-  final sleepDays = sleepDurationSeries(roster: roster, windowDays: windowDays);
+  final sleepDays = isDemoAccount
+      ? sleepDurationSeries(roster: roster, windowDays: windowDays)
+      : sleepDurationSeriesWithActualMinutes(
+          roster: roster.take(recentRealMetrics.length).toList(),
+          actualMinutes: [
+            for (final metric in recentRealMetrics) metric.sleepMinutes,
+          ],
+        );
   final averageTargetMin = sleepDays.isEmpty
       ? 0
       : sleepDays.fold<int>(0, (sum, d) => sum + d.targetMinutes) ~/
@@ -292,7 +334,7 @@ Future<AiReportResult> fetchAiReport({
         'gapMinutes': gapMinutes,
         'sleepDebtMin': sleepDebtMin,
         'sleepDebtDisplay': sleepDebtDisplay,
-        'sleepDataSource': 'demo_sleep_mock',
+        'sleepDataSource': isDemoAccount ? 'demo_sleep_mock' : 'synced_health',
         'shiftPattern': shiftPattern,
         'sleepSummary': {
           'averageTargetMin': averageTargetMin,
@@ -355,7 +397,7 @@ Future<AiReportResult> fetchAiReport({
         'responseInstruction':
             '당신은 교대근무 간호사의 일주기·수면·피부 루틴을 돕는 개인 웰니스 코치입니다. '
             '이 서비스의 최우선 기능은 수면 관리입니다. 답변의 첫 두 문장은 반드시 수면 인사이트와 실행 행동이어야 하며 피부 이야기로 시작하거나 피부 조언만 제공하면 안 됩니다. '
-            '현재 수면 수치는 워치 실측이 아닌 최근 14일 데모 기록입니다. 실제 측정값처럼 단정하지 말고 데모 기록 기준임을 밝혀주세요. '
+            '${isDemoAccount ? '현재 수면 수치는 워치 실측이 아닌 최근 14일 데모 기록입니다. 실제 측정값처럼 단정하지 말고 데모 기록 기준임을 밝혀주세요.' : '현재 수면 수치는 동기화된 실제 수면 기록입니다. 기록 범위 안에서만 해석하고 의학적 진단처럼 단정하지 마세요.'} '
             '1320분처럼 긴 시간을 원시 분 단위로 쓰지 말고 sleepDebtDisplay의 22시간 같은 읽기 쉬운 표현만 사용하세요. '
             '반드시 personalizationBrief와 userState를 근거로 이 사용자에게만 해당하는 답을 한국어 3문장, 200자 이내로 작성하세요. '
             'recentDailyCheckIns에서 같은 상태가 2회 이상 반복되면 오늘만의 증상처럼 다루지 말고, 정확한 반복 일수와 함께 근무·수면 패턴의 연관 가능성을 짚으세요. '
@@ -380,6 +422,7 @@ Future<AiReportResult> fetchAiReport({
         averageTargetMin: averageTargetMin,
         averageActualMin: averageActualMin,
         upcomingNightCount: upcomingNightCount,
+        isDemoAccount: isDemoAccount,
         stateNote: effectiveStateNote,
       ),
     );
@@ -390,6 +433,7 @@ Future<AiReportResult> fetchAiReport({
         averageTargetMin: averageTargetMin,
         averageActualMin: averageActualMin,
         upcomingNightCount: upcomingNightCount,
+        isDemoAccount: isDemoAccount,
         stateNote: effectiveStateNote,
       ),
     );
@@ -409,6 +453,7 @@ Future<AiReportResult> fetchAiReport({
           averageTargetMin: averageTargetMin,
           averageActualMin: averageActualMin,
           upcomingNightCount: upcomingNightCount,
+          isDemoAccount: isDemoAccount,
           stateNote: effectiveStateNote,
         );
   return AiReportResult(comment);

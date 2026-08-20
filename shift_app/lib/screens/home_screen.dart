@@ -145,10 +145,30 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _future = loadTodayNudges();
     _alertFuture = loadAlertness();
-    _sleepDurationFuture = _alertFuture.then(
-      (r) => sleepDurationSeries(roster: r.roster),
-    );
+    _sleepDurationFuture = _loadSleepDurationDays();
     _recoveryFuture = _loadRecovery(_healthSource);
+  }
+
+  Future<List<SleepDurationDay>> _loadSleepDurationDays() async {
+    final rhythm = await _alertFuture;
+    if (AppState.instance.isDemoAccount) {
+      return sleepDurationSeries(roster: rhythm.roster);
+    }
+    final end = DateTime.now();
+    final start = end.subtract(const Duration(days: 15));
+    final sessions = await _healthSource.sleepSessions(DateRange(start, end));
+    if (sessions.length < minimumSleepRecordsForInsight) return const [];
+    sessions.sort((a, b) => a.end.compareTo(b.end));
+    final recent = sessions.length <= 14
+        ? sessions
+        : sessions.sublist(sessions.length - 14);
+    return sleepDurationSeriesWithActualMinutes(
+      roster: rhythm.roster.take(recent.length).toList(),
+      actualMinutes: [
+        for (final session in recent)
+          session.end.difference(session.start).inMinutes,
+      ],
+    );
   }
 
   @override
@@ -236,12 +256,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     _TodayContent(
                       isNight: isNight,
                       data: data,
-                      completedActions: _completedActions,
-                      onToggleAction: (i) => setState(() {
-                        if (!_completedActions.add(i)) {
-                          _completedActions.remove(i);
-                        }
-                      }),
                       onLogBedtime: () =>
                           setState(() => AppState.instance.logBedtimeIntent()),
                       onLogWake: () =>
@@ -318,6 +332,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                   ),
+                  if (data != null) ...[
+                    const SizedBox(height: AppSpacing.xxl),
+                    _TodayActions(
+                      data: data,
+                      completedActions: _completedActions,
+                      onToggleAction: (i) => setState(() {
+                        if (!_completedActions.add(i)) {
+                          _completedActions.remove(i);
+                        }
+                      }),
+                    ),
+                  ],
                   const _HomeSectionDivider(),
                   Text('최근 2주 권장 수면량', style: AppTypography.subtitle04),
                   const SizedBox(height: 4),
@@ -342,8 +368,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         // 다른 보조 섹션(최근 회복 상태 등)과 같은 원칙 —
                         // 선택 데이터라 로딩 중에도 스피너 없이 빈 자리만
                         // 유지한다(레이아웃 점프만 방지).
-                        if (days == null || days.isEmpty) {
+                        if (days == null) {
                           return const SizedBox(height: 120);
+                        }
+                        if (days.isEmpty) {
+                          return const _InsufficientSleepData();
                         }
                         return _SleepDurationChart(days: days);
                       },
@@ -367,6 +396,39 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _InsufficientSleepData extends StatelessWidget {
+  const _InsufficientSleepData();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 140,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.bedtime_outlined,
+              color: AppColors.textPlaceholder,
+              size: 28,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text('수면 기록이 아직 부족해요', style: AppTypography.subtitle04),
+            const SizedBox(height: 4),
+            Text(
+              '3일 이상 기록되면 권장 수면량과 실제 수면을 비교해드려요.',
+              textAlign: TextAlign.center,
+              style: AppTypography.caption02.copyWith(
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -603,16 +665,12 @@ class _TodayContent extends StatelessWidget {
   const _TodayContent({
     required this.isNight,
     required this.data,
-    required this.completedActions,
-    required this.onToggleAction,
     required this.onLogBedtime,
     required this.onLogWake,
   });
 
   final bool isNight;
   final TodayNudges data;
-  final Set<int> completedActions;
-  final ValueChanged<int> onToggleAction;
   final VoidCallback onLogBedtime;
   final VoidCallback onLogWake;
 
@@ -704,7 +762,27 @@ class _TodayContent extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.xxl),
+      ],
+    );
+  }
+}
+
+class _TodayActions extends StatelessWidget {
+  const _TodayActions({
+    required this.data,
+    required this.completedActions,
+    required this.onToggleAction,
+  });
+
+  final TodayNudges data;
+  final Set<int> completedActions;
+  final ValueChanged<int> onToggleAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text('오늘의 행동', style: AppTypography.subtitle04),
         const SizedBox(height: AppSpacing.sm),
         if (data.actions.isEmpty)

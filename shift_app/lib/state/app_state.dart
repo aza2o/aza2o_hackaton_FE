@@ -95,8 +95,23 @@ class AppState extends ChangeNotifier {
   /// Supabase Auth가 검증한 사용자 정보를 로컬 앱 상태에 반영한다.
   /// 비밀번호는 Supabase 세션만 관리하며 앱 메모리나 디스크에 보관하지 않는다.
   void setAuthenticatedUser({required String name, required String email}) {
+    final normalizedEmail = email.trim().toLowerCase();
+    final previousEmail = userEmail?.trim().toLowerCase();
+    if (previousEmail != null && previousEmail != normalizedEmail) {
+      dailyCheckIns.clear();
+      syncedHealthMetrics.clear();
+      roster = null;
+      rosterStartDate = null;
+      rosterMissingIndices.clear();
+      shiftTimings = null;
+      aiComment = null;
+      aiCommentAt = null;
+      aiCommentFormat = null;
+      bedtimeIntents.clear();
+      wakeIntents.clear();
+    }
     userName = name;
-    userEmail = email;
+    userEmail = normalizedEmail;
     _userPassword = null;
     isDemoAccount = false;
     _persist();
@@ -132,6 +147,7 @@ class AppState extends ChangeNotifier {
     shiftTimings = null;
     roster = null;
     rosterStartDate = null;
+    rosterMissingIndices.clear();
     chronotype = 'neutral';
     caffeineCutoff = const TimeOfDay(hour: 14, minute: 0);
     caffeineServings = 1;
@@ -288,7 +304,8 @@ class AppState extends ChangeNotifier {
   String? aiComment;
   DateTime? aiCommentAt;
   String? aiCommentFormat;
-  static const currentAiCommentFormat = 'home_sleep_first_coach_v8';
+  // v9: 일반 계정에 데모 수면 분석이 노출되던 이전 캐시를 무효화한다.
+  static const currentAiCommentFormat = 'home_sleep_first_coach_v9';
 
   bool get hasFreshAiComment {
     final at = aiCommentAt;

@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.11+12
+version: 1.0.12+13
 
 environment:
   sdk: ^3.13.0
@@ -85,15 +85,6 @@ flutter:
   assets:
     - assets/messages.json
 
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: assets/branding/sleepready_app_icon.png
-  adaptive_icon_background: "#EAF2FF"
-  adaptive_icon_foreground: assets/branding/sleepready_app_icon.png
-  remove_alpha_ios: true
-
-
   fonts:
     - family: Pretendard
       fonts:
@@ -105,6 +96,19 @@ flutter_launcher_icons:
           weight: 600
         - asset: assets/fonts/PretendardStd-Bold.otf
           weight: 700
+    - family: Jua
+      fonts:
+        - asset: assets/fonts/jua/Jua-Regular.ttf
+          weight: 400
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/branding/sleepready_app_icon.png
+  adaptive_icon_background: "#EAF2FF"
+  adaptive_icon_foreground: assets/branding/sleepready_app_icon.png
+  remove_alpha_ios: true
+
 
   # To add assets to your application, add an assets section, like this:
   # assets:
