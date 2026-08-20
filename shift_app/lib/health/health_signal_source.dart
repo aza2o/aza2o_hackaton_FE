@@ -11,6 +11,8 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:health/health.dart' as hk;
 
+import '../state/app_state.dart';
+
 class DateRange {
   const DateRange(this.start, this.end);
   final DateTime start;
@@ -30,7 +32,8 @@ class DaylightSeries {
 
 class HrvSeries {
   const HrvSeries(this.points);
-  final List<(DateTime, double)> points; // 개인 내 z-score. 원시 SDNN/RMSSD 금지(§6-3-f)
+  final List<(DateTime, double)>
+  points; // 개인 내 z-score. 원시 SDNN/RMSSD 금지(§6-3-f)
 }
 
 class HeartRateSeries {
@@ -79,15 +82,64 @@ class DemoHealthSource implements HealthSignalSource {
   const DemoHealthSource({this.hasData = true});
 
   final bool hasData;
-  static final int _seed = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
+
+  // 월간 데모 로스터(D-D-E-E-N-N-O-O-D-E-N-O)와 같은 순서다.
+  // 날짜를 seed로 사용해 재실행해도 값은 유지하되, 매일 완전히 같지는 않다.
+  static const _sleepAnchors = [
+    (22, 42, 410),
+    (22, 58, 392),
+    (0, 38, 432),
+    (0, 57, 408),
+    (8, 34, 375),
+    (8, 52, 348),
+    (9, 8, 402),
+    (23, 48, 478),
+    (22, 47, 421),
+    (0, 44, 416),
+    (8, 41, 363),
+    (23, 56, 462),
+  ];
+  static const _hrvAnchors = [
+    -0.10,
+    -0.25,
+    -0.18,
+    -0.38,
+    -0.58,
+    -0.82,
+    -0.45,
+    0.28,
+    0.04,
+    -0.22,
+    -0.67,
+    0.21,
+  ];
+  static const _heartRateAnchors = [
+    63.0,
+    64.0,
+    64.0,
+    66.0,
+    68.0,
+    70.0,
+    67.0,
+    61.0,
+    62.0,
+    65.0,
+    69.0,
+    61.0,
+  ];
+
+  static int _patternIndex(DateTime day) =>
+      (day.day - 1) % _sleepAnchors.length;
+  static int _dateSeed(DateTime day, int salt) =>
+      day.year * 10000 + day.month * 100 + day.day + salt;
 
   @override
   HealthCapabilities get capabilities => const HealthCapabilities(
-        hasDaylight: false,
-        canVerifyPermission: false,
-        maxHistory: Duration(days: 3650),
-        hrvMetric: HrvMetric.none,
-      );
+    hasDaylight: false,
+    canVerifyPermission: false,
+    maxHistory: Duration(days: 3650),
+    hrvMetric: HrvMetric.none,
+  );
 
   @override
   Future<bool> requestAuthorization() async => true;
@@ -95,22 +147,22 @@ class DemoHealthSource implements HealthSignalSource {
   @override
   Future<List<HealthSleepSession>> sleepSessions(DateRange range) async {
     if (!hasData) return const [];
-    // 교대근무자의 데모 데이터답게 취침 시각과 수면 길이가 매일 조금씩
-    // 달라진다. 요일을 키로 써서 앱을 다시 열어도 값이 갑자기 바뀌지 않는다.
-    const bedtimeAnchors = [(23, 20), (0, 10), (8, 35), (9, 5), (23, 45), (0, 25), (23, 10)];
     final sessions = <HealthSleepSession>[];
-    var day = DateTime(range.start.year, range.start.month, range.start.day)
-        .subtract(const Duration(days: 1));
+    var day = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day,
+    ).subtract(const Duration(days: 1));
     final lastDay = DateTime(range.end.year, range.end.month, range.end.day);
     while (!day.isAfter(lastDay)) {
-      final random = math.Random(_seed + day.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay);
-      final anchor = bedtimeAnchors[day.weekday - 1];
-      final jitter = random.nextInt(51) - 25;
-      final isDaySleep = anchor.$1 == 8 || anchor.$1 == 9;
-      final sleepMinutes = isDaySleep
-          ? 340 + random.nextInt(76)
-          : 385 + random.nextInt(71);
-      final bedtime = day.add(Duration(hours: anchor.$1, minutes: anchor.$2 + jitter));
+      final random = math.Random(_dateSeed(day, 1709));
+      final anchor = _sleepAnchors[_patternIndex(day)];
+      final bedtimeJitter = random.nextInt(25) - 12;
+      final durationJitter = random.nextInt(31) - 15;
+      final sleepMinutes = anchor.$3 + durationJitter;
+      final bedtime = day.add(
+        Duration(hours: anchor.$1, minutes: anchor.$2 + bedtimeJitter),
+      );
       final end = bedtime.add(Duration(minutes: sleepMinutes));
       if (end.isAfter(range.start) && bedtime.isBefore(range.end)) {
         sessions.add(HealthSleepSession(bedtime, end));
@@ -126,22 +178,94 @@ class DemoHealthSource implements HealthSignalSource {
   @override
   Future<HrvSeries?> hrvNormalized(DateRange range) async {
     if (!hasData) return null;
-    final random = math.Random(_seed + range.end.day * 3571);
-    final latest = -0.6 + random.nextDouble();
-    return HrvSeries([
-      (range.end.subtract(const Duration(hours: 22)), latest + 0.15),
-      (range.end.subtract(const Duration(hours: 2)), latest),
-    ]);
+    final points = <(DateTime, double)>[];
+    var day = DateTime(range.start.year, range.start.month, range.start.day);
+    final lastDay = DateTime(range.end.year, range.end.month, range.end.day);
+    while (!day.isAfter(lastDay)) {
+      final random = math.Random(_dateSeed(day, 3571));
+      final anchor = _hrvAnchors[_patternIndex(day)];
+      final value = anchor + (random.nextDouble() - 0.5) * 0.16;
+      final measuredAt = day.add(const Duration(hours: 7, minutes: 30));
+      if (measuredAt.isAfter(range.start) && measuredAt.isBefore(range.end)) {
+        points.add((measuredAt, value));
+      }
+      day = day.add(const Duration(days: 1));
+    }
+    return HrvSeries(points);
   }
 
   @override
   Future<HeartRateSeries?> restingHeartRate(DateRange range) async {
     if (!hasData) return null;
-    final random = math.Random(_seed + range.end.day * 6427);
-    final latest = 60.0 + random.nextInt(10);
+    final points = <(DateTime, double)>[];
+    var day = DateTime(range.start.year, range.start.month, range.start.day);
+    final lastDay = DateTime(range.end.year, range.end.month, range.end.day);
+    while (!day.isAfter(lastDay)) {
+      final random = math.Random(_dateSeed(day, 6427));
+      final anchor = _heartRateAnchors[_patternIndex(day)];
+      final value = anchor + random.nextInt(3) - 1;
+      final measuredAt = day.add(const Duration(hours: 7, minutes: 35));
+      if (measuredAt.isAfter(range.start) && measuredAt.isBefore(range.end)) {
+        points.add((measuredAt, value));
+      }
+      day = day.add(const Duration(days: 1));
+    }
+    return HeartRateSeries(points);
+  }
+}
+
+/// 로그인 시 Supabase에서 내려받아 로컬에 캐시한 건강 지표를 제공한다.
+/// 서버 데이터가 비어 있으면 시연이 중단되지 않도록 기존 데모 소스로 폴백한다.
+class SyncedHealthSource implements HealthSignalSource {
+  const SyncedHealthSource();
+
+  static const _fallback = DemoHealthSource();
+
+  @override
+  HealthCapabilities get capabilities => _fallback.capabilities;
+
+  @override
+  Future<bool> requestAuthorization() async => true;
+
+  List<SyncedHealthMetric> _within(DateRange range) => AppState
+      .instance
+      .syncedHealthMetrics
+      .where(
+        (metric) =>
+            metric.sleepEnd.isAfter(range.start) &&
+            metric.sleepStart.isBefore(range.end),
+      )
+      .toList();
+
+  @override
+  Future<List<HealthSleepSession>> sleepSessions(DateRange range) async {
+    final metrics = _within(range);
+    if (metrics.isEmpty) return _fallback.sleepSessions(range);
+    return [
+      for (final metric in metrics)
+        HealthSleepSession(metric.sleepStart, metric.sleepEnd),
+    ];
+  }
+
+  @override
+  Future<DaylightSeries?> daylight(DateRange range) async => null;
+
+  @override
+  Future<HrvSeries?> hrvNormalized(DateRange range) async {
+    final metrics = _within(range).where((metric) => metric.hrvZ != null);
+    if (metrics.isEmpty) return _fallback.hrvNormalized(range);
+    return HrvSeries([
+      for (final metric in metrics) (metric.sleepEnd, metric.hrvZ!),
+    ]);
+  }
+
+  @override
+  Future<HeartRateSeries?> restingHeartRate(DateRange range) async {
+    final metrics = _within(range)
+        .where((metric) => metric.restingHeartRate != null);
+    if (metrics.isEmpty) return _fallback.restingHeartRate(range);
     return HeartRateSeries([
-      (range.end.subtract(const Duration(hours: 22)), latest - 2),
-      (range.end.subtract(const Duration(hours: 2)), latest),
+      for (final metric in metrics) (metric.sleepEnd, metric.restingHeartRate!),
     ]);
   }
 }
@@ -171,7 +295,12 @@ Future<List<(DateTime, double)>> _fetchNumericSeries(
     endTime: range.end,
   );
   return points
-      .map((p) => (p.dateFrom, (p.value as hk.NumericHealthValue).numericValue.toDouble()))
+      .map(
+        (p) => (
+          p.dateFrom,
+          (p.value as hk.NumericHealthValue).numericValue.toDouble(),
+        ),
+      )
       .toList()
     ..sort((a, b) => a.$1.compareTo(b.$1));
 }
@@ -181,7 +310,9 @@ Future<List<(DateTime, double)>> _fetchNumericSeries(
 // 별도 베이스라인 창을 요구하는 문헌 근거는 없었다.
 List<(DateTime, double)> _personalZScore(List<(DateTime, double)> raw) {
   final mean = raw.map((e) => e.$2).reduce((a, b) => a + b) / raw.length;
-  final variance = raw.map((e) => math.pow(e.$2 - mean, 2)).reduce((a, b) => a + b) / raw.length;
+  final variance =
+      raw.map((e) => math.pow(e.$2 - mean, 2)).reduce((a, b) => a + b) /
+      raw.length;
   final stddev = math.sqrt(variance);
   if (stddev == 0) return raw.map((e) => (e.$1, 0.0)).toList();
   return raw.map((e) => (e.$1, (e.$2 - mean) / stddev)).toList();
@@ -199,11 +330,11 @@ class IosHealthSource implements HealthSignalSource {
 
   @override
   HealthCapabilities get capabilities => const HealthCapabilities(
-        hasDaylight: true,
-        canVerifyPermission: false, // §6-3-c: 권한 거부 여부를 앱에 알리지 않는다
-        maxHistory: Duration(days: 36500), // §6-3-d: 권한만 있으면 과거 전체를 읽는다
-        hrvMetric: HrvMetric.sdnn,
-      );
+    hasDaylight: true,
+    canVerifyPermission: false, // §6-3-c: 권한 거부 여부를 앱에 알리지 않는다
+    maxHistory: Duration(days: 36500), // §6-3-d: 권한만 있으면 과거 전체를 읽는다
+    hrvMetric: HrvMetric.sdnn,
+  );
 
   Future<void> _ensureConfigured() async {
     if (_configured) return;
@@ -255,14 +386,19 @@ class IosHealthSource implements HealthSignalSource {
   @override
   Future<DaylightSeries?> daylight(DateRange range) async {
     try {
-      final raw = await _daylightChannel.invokeMethod<List<Object?>>('timeInDaylight', {
-        'startMillis': range.start.millisecondsSinceEpoch,
-        'endMillis': range.end.millisecondsSinceEpoch,
-      });
+      final raw = await _daylightChannel.invokeMethod<List<Object?>>(
+        'timeInDaylight',
+        {
+          'startMillis': range.start.millisecondsSinceEpoch,
+          'endMillis': range.end.millisecondsSinceEpoch,
+        },
+      );
       if (raw == null || raw.isEmpty) return null;
       final points = raw.map((entry) {
         final map = Map<Object?, Object?>.from(entry as Map);
-        final t = DateTime.fromMillisecondsSinceEpoch((map['t'] as num).toInt());
+        final t = DateTime.fromMillisecondsSinceEpoch(
+          (map['t'] as num).toInt(),
+        );
         final v = (map['v'] as num).toDouble();
         return (t, v);
       }).toList();
@@ -276,7 +412,11 @@ class IosHealthSource implements HealthSignalSource {
   @override
   Future<HrvSeries?> hrvNormalized(DateRange range) async {
     await _ensureConfigured();
-    final raw = await _fetchNumericSeries(_health, hk.HealthDataType.HEART_RATE_VARIABILITY_SDNN, range);
+    final raw = await _fetchNumericSeries(
+      _health,
+      hk.HealthDataType.HEART_RATE_VARIABILITY_SDNN,
+      range,
+    );
     if (raw.isEmpty) return null;
     return HrvSeries(_personalZScore(raw));
   }
@@ -284,7 +424,11 @@ class IosHealthSource implements HealthSignalSource {
   @override
   Future<HeartRateSeries?> restingHeartRate(DateRange range) async {
     await _ensureConfigured();
-    final series = await _fetchNumericSeries(_health, hk.HealthDataType.RESTING_HEART_RATE, range);
+    final series = await _fetchNumericSeries(
+      _health,
+      hk.HealthDataType.RESTING_HEART_RATE,
+      range,
+    );
     if (series.isEmpty) return null;
     return HeartRateSeries(series);
   }
@@ -306,11 +450,11 @@ class AndroidHealthSource implements HealthSignalSource {
 
   @override
   HealthCapabilities get capabilities => const HealthCapabilities(
-        hasDaylight: false,
-        canVerifyPermission: true, // Health Connect는 부여된 권한을 조회할 수 있다(§6-3-c)
-        maxHistory: Duration(days: 30), // §6-3-d: 기본 30일, 그 이상은 별도 이력 권한 필요
-        hrvMetric: HrvMetric.rmssd,
-      );
+    hasDaylight: false,
+    canVerifyPermission: true, // Health Connect는 부여된 권한을 조회할 수 있다(§6-3-c)
+    maxHistory: Duration(days: 30), // §6-3-d: 기본 30일, 그 이상은 별도 이력 권한 필요
+    hrvMetric: HrvMetric.rmssd,
+  );
 
   Future<void> _ensureConfigured() async {
     if (_configured) return;
@@ -366,7 +510,11 @@ class AndroidHealthSource implements HealthSignalSource {
   @override
   Future<HrvSeries?> hrvNormalized(DateRange range) async {
     await _ensureConfigured();
-    final raw = await _fetchNumericSeries(_health, hk.HealthDataType.HEART_RATE_VARIABILITY_RMSSD, range);
+    final raw = await _fetchNumericSeries(
+      _health,
+      hk.HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
+      range,
+    );
     if (raw.isEmpty) return null;
     return HrvSeries(_personalZScore(raw));
   }
@@ -374,7 +522,11 @@ class AndroidHealthSource implements HealthSignalSource {
   @override
   Future<HeartRateSeries?> restingHeartRate(DateRange range) async {
     await _ensureConfigured();
-    final series = await _fetchNumericSeries(_health, hk.HealthDataType.RESTING_HEART_RATE, range);
+    final series = await _fetchNumericSeries(
+      _health,
+      hk.HealthDataType.RESTING_HEART_RATE,
+      range,
+    );
     if (series.isEmpty) return null;
     return HeartRateSeries(series);
   }

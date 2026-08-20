@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../theme/app_colors.dart';
 
 /// Figma "glass" 카드의 근사치. 네이티브 GLASS 이펙트는 Flutter에 대응
@@ -10,11 +11,13 @@ class AppCard extends StatelessWidget {
     required this.child,
     this.padding = const EdgeInsets.all(16),
     this.borderRadius = 18,
+    this.elevated = false,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
   final double borderRadius;
+  final bool elevated;
 
   @override
   Widget build(BuildContext context) {
@@ -23,11 +26,13 @@ class AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.grayWhite,
         borderRadius: BorderRadius.circular(borderRadius),
+        border: elevated ? Border.all(color: AppColors.gray100) : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: Colors.black.withValues(alpha: elevated ? 0.12 : 0.04),
+            blurRadius: elevated ? 30 : 20,
+            spreadRadius: elevated ? 1 : 0,
+            offset: Offset(0, elevated ? 12 : 8),
           ),
         ],
       ),

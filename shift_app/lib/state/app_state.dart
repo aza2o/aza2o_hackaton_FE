@@ -29,10 +29,34 @@ class WakeIntent {
 }
 
 class DailyCheckIn {
-  const DailyCheckIn({required this.at, required this.tags, required this.note});
+  const DailyCheckIn({
+    required this.at,
+    required this.tags,
+    required this.note,
+  });
   final DateTime at;
   final List<String> tags;
   final String note;
+}
+
+class SyncedHealthMetric {
+  const SyncedHealthMetric({
+    required this.date,
+    required this.sleepStart,
+    required this.sleepEnd,
+    required this.sleepMinutes,
+    required this.hrvZ,
+    required this.restingHeartRate,
+    required this.source,
+  });
+
+  final DateTime date;
+  final DateTime sleepStart;
+  final DateTime sleepEnd;
+  final int sleepMinutes;
+  final double? hrvZ;
+  final double? restingHeartRate;
+  final String source;
 }
 
 class AppState extends ChangeNotifier {
@@ -51,13 +75,19 @@ class AppState extends ChangeNotifier {
   String? userName;
   String? userEmail;
   String? _userPassword;
+  bool isDemoAccount = false;
 
   bool get isSignedIn => userName != null;
 
-  void signUp({required String name, required String email, required String password}) {
+  void signUp({
+    required String name,
+    required String email,
+    required String password,
+  }) {
     userName = name;
     userEmail = email;
     _userPassword = password;
+    isDemoAccount = false;
     _persist();
     notifyListeners();
   }
@@ -68,6 +98,13 @@ class AppState extends ChangeNotifier {
     userName = name;
     userEmail = email;
     _userPassword = null;
+    isDemoAccount = false;
+    _persist();
+    notifyListeners();
+  }
+
+  void setDemoAccountMode(bool value) {
+    isDemoAccount = value;
     _persist();
     notifyListeners();
   }
@@ -86,10 +123,12 @@ class AppState extends ChangeNotifier {
     userName = null;
     userEmail = null;
     _userPassword = null;
+    isDemoAccount = false;
     skinType = 'combination';
     skinConcerns = [];
     skinSensitivities = [];
     dailyCheckIns.clear();
+    syncedHealthMetrics.clear();
     shiftTimings = null;
     roster = null;
     rosterStartDate = null;
@@ -108,6 +147,117 @@ class AppState extends ChangeNotifier {
     bedtimeIntents.clear();
     wakeIntents.clear();
     _clearPersisted();
+    notifyListeners();
+  }
+
+  /// 심사 환경용 계정에 현실적인 교대근무·수면·피부 데이터를 채운다.
+  /// 서버나 웨어러블이 없어도 로그인할 때마다 동일한 시연 상태를 보장한다.
+  Future<void> seedDemoAccount() async {
+    final now = DateTime.now();
+    userName = '슬립레디 데모';
+    userEmail = 'demo@sleepready.app';
+    _userPassword = null;
+    isDemoAccount = true;
+
+    privacyConsent = true;
+    aiConsent = true;
+    wearableConsent = true;
+    consentAt = now.subtract(const Duration(days: 20));
+    shiftTimings = const {
+      ShiftType.day: (
+        TimeOfDay(hour: 7, minute: 0),
+        TimeOfDay(hour: 15, minute: 0),
+      ),
+      ShiftType.evening: (
+        TimeOfDay(hour: 15, minute: 0),
+        TimeOfDay(hour: 23, minute: 0),
+      ),
+      ShiftType.night: (
+        TimeOfDay(hour: 23, minute: 0),
+        TimeOfDay(hour: 7, minute: 0),
+      ),
+    };
+    workplaceLighting = 'bright';
+    bedroomLighting = 'blackout';
+    chronotype = 'evening';
+    caffeineCutoff = const TimeOfDay(hour: 14, minute: 0);
+    caffeineServings = 2;
+    skinType = 'combination';
+    skinConcerns = ['턱 트러블', '속건조', '칙칙함'];
+    skinSensitivities = ['향료', '반복 세안'];
+
+    const shiftPattern = [
+      ShiftType.day,
+      ShiftType.day,
+      ShiftType.evening,
+      ShiftType.evening,
+      ShiftType.night,
+      ShiftType.night,
+      ShiftType.off,
+      ShiftType.off,
+      ShiftType.day,
+      ShiftType.evening,
+      ShiftType.night,
+      ShiftType.off,
+    ];
+    final daysInMonth = DateUtils.getDaysInMonth(now.year, now.month);
+    roster = [
+      for (var day = 0; day < daysInMonth; day++)
+        shiftPattern[day % shiftPattern.length],
+    ];
+    rosterStartDate = DateTime(now.year, now.month);
+
+    const checkInSeeds = [
+      (['많이 피곤해요', '잠이 잘 안 와요'], '나이트 퇴근 후에도 머리가 맑아서 잠드는 데 오래 걸렸어요.'),
+      (['피부가 예민해요'], '마스크를 오래 쓴 날 턱 주변이 붉고 작은 트러블이 올라왔어요.'),
+      (['자다가 자꾸 깨요'], '낮 수면 중 두 번 깨고 다시 잠들기 어려웠어요.'),
+      (['오늘은 괜찮아요'], '오프 날이라 7시간 넘게 자고 컨디션이 회복됐어요.'),
+      (['많이 피곤해요'], '이브닝 다음 날 데이 근무라 수면이 짧았어요.'),
+      (['잠이 잘 안 와요', '피부가 예민해요'], '늦게 마신 커피 뒤로 잠이 밀리고 턱이 간지러웠어요.'),
+      (['자다가 자꾸 깨요'], '퇴근길 햇빛을 많이 본 뒤 낮잠이 얕았어요.'),
+      (['오늘은 괜찮아요'], '암막 커튼을 치고 자니 중간에 깨지 않았어요.'),
+      (['많이 피곤해요'], '나이트 2일 차라 눈이 무겁고 집중이 잘 안 됐어요.'),
+      (['피부가 예민해요'], '수면이 부족한 날 볼은 당기고 턱은 번들거렸어요.'),
+      (['잠이 잘 안 와요'], '교대 전날 취침 시간을 앞당기려다 한참 뒤척였어요.'),
+      (['오늘은 괜찮아요'], '카페인을 일찍 끊고 권장 시간에 누웠어요.'),
+      (['많이 피곤해요', '자다가 자꾸 깨요'], '근무 알림 소리에 낮 수면이 끊겼어요.'),
+      (['피부가 예민해요'], '연속 근무 뒤 턱과 귀 주변에 트러블이 생겼어요.'),
+    ];
+    dailyCheckIns
+      ..clear()
+      ..addAll([
+        for (var i = 0; i < checkInSeeds.length; i++)
+          DailyCheckIn(
+            at: now.subtract(Duration(days: i, hours: 2 + i % 4)),
+            tags: List<String>.of(checkInSeeds[i].$1),
+            note: checkInSeeds[i].$2,
+          ),
+      ]);
+
+    bedtimeIntents
+      ..clear()
+      ..addAll([
+        BedtimeIntent(now.subtract(const Duration(hours: 9, minutes: 12))),
+        BedtimeIntent(
+          now.subtract(const Duration(days: 1, hours: 8, minutes: 5)),
+        ),
+        BedtimeIntent(
+          now.subtract(const Duration(days: 2, hours: 7, minutes: 48)),
+        ),
+      ]);
+    wakeIntents
+      ..clear()
+      ..addAll([
+        WakeIntent(now.subtract(const Duration(hours: 2, minutes: 31))),
+        WakeIntent(
+          now.subtract(const Duration(days: 1, hours: 1, minutes: 34)),
+        ),
+        WakeIntent(now.subtract(const Duration(days: 2, minutes: 57))),
+      ]);
+    aiComment = null;
+    aiCommentAt = null;
+    aiCommentFormat = null;
+    await _persist();
     notifyListeners();
   }
 
@@ -140,7 +290,9 @@ class AppState extends ChangeNotifier {
 
   bool get hasFreshAiComment {
     final at = aiCommentAt;
-    if (aiComment == null || at == null || aiCommentFormat != currentAiCommentFormat) {
+    if (aiComment == null ||
+        at == null ||
+        aiCommentFormat != currentAiCommentFormat) {
       return false;
     }
     final now = DateTime.now();
@@ -197,6 +349,7 @@ class AppState extends ChangeNotifier {
   final List<BedtimeIntent> bedtimeIntents = [];
   final List<WakeIntent> wakeIntents = [];
   final List<DailyCheckIn> dailyCheckIns = [];
+  final List<SyncedHealthMetric> syncedHealthMetrics = [];
   String skinType = 'combination';
   List<String> skinConcerns = [];
   List<String> skinSensitivities = [];
@@ -244,7 +397,9 @@ class AppState extends ChangeNotifier {
       0,
       DailyCheckIn(at: DateTime.now(), tags: List.of(tags), note: note.trim()),
     );
-    if (dailyCheckIns.length > 90) dailyCheckIns.removeRange(90, dailyCheckIns.length);
+    if (dailyCheckIns.length > 90) {
+      dailyCheckIns.removeRange(90, dailyCheckIns.length);
+    }
     _persist();
     notifyListeners();
   }
@@ -253,6 +408,14 @@ class AppState extends ChangeNotifier {
     dailyCheckIns
       ..clear()
       ..addAll(entries.take(90));
+    _persist();
+    notifyListeners();
+  }
+
+  void replaceSyncedHealthMetrics(List<SyncedHealthMetric> entries) {
+    syncedHealthMetrics
+      ..clear()
+      ..addAll(entries);
     _persist();
     notifyListeners();
   }
@@ -351,53 +514,66 @@ class AppState extends ChangeNotifier {
   }
 
   Map<String, dynamic> _toJson() => {
-        'userName': userName,
-        'userEmail': userEmail,
-        if (shiftTimings != null)
-          'shiftTimings': {
-            for (final e in shiftTimings!.entries)
-              e.key.name: [_toMinutes(e.value.$1), _toMinutes(e.value.$2)],
-          },
-        'workplaceLighting': workplaceLighting,
-        'bedroomLighting': bedroomLighting,
-        'chronotype': chronotype,
-        'caffeineCutoffMin': _toMinutes(caffeineCutoff),
-        'caffeineServings': caffeineServings,
-        'skinType': skinType,
-        'skinConcerns': skinConcerns,
-        'skinSensitivities': skinSensitivities,
-        'privacyConsent': privacyConsent,
-        'aiConsent': aiConsent,
-        'wearableConsent': wearableConsent,
-        if (consentAt != null) 'consentAt': consentAt!.toIso8601String(),
-        if (aiComment != null) 'aiComment': aiComment,
-        if (aiCommentAt != null) 'aiCommentAt': aiCommentAt!.toIso8601String(),
-        if (aiCommentFormat != null) 'aiCommentFormat': aiCommentFormat,
-        if (roster != null) 'roster': [for (final s in roster!) s.name],
-        if (rosterStartDate != null)
-          'rosterStartDate': rosterStartDate!.toIso8601String(),
-        // 무한정 쌓이면 안 되니 최근 것만 — 홈은 가장 최근 1건만 쓴다.
-        'bedtimeIntents': [
-          for (final i in bedtimeIntents.take(60))
-            {'at': i.at.toIso8601String(), 'note': i.note},
-        ],
-        'wakeIntents': [
-          for (final i in wakeIntents.take(60))
-            {'at': i.at.toIso8601String()},
-        ],
-        'dailyCheckIns': [
-          for (final entry in dailyCheckIns.take(90))
-            {
-              'at': entry.at.toIso8601String(),
-              'tags': entry.tags,
-              'note': entry.note,
-            },
-        ],
-      };
+    'userName': userName,
+    'userEmail': userEmail,
+    'isDemoAccount': isDemoAccount,
+    if (shiftTimings != null)
+      'shiftTimings': {
+        for (final e in shiftTimings!.entries)
+          e.key.name: [_toMinutes(e.value.$1), _toMinutes(e.value.$2)],
+      },
+    'workplaceLighting': workplaceLighting,
+    'bedroomLighting': bedroomLighting,
+    'chronotype': chronotype,
+    'caffeineCutoffMin': _toMinutes(caffeineCutoff),
+    'caffeineServings': caffeineServings,
+    'skinType': skinType,
+    'skinConcerns': skinConcerns,
+    'skinSensitivities': skinSensitivities,
+    'privacyConsent': privacyConsent,
+    'aiConsent': aiConsent,
+    'wearableConsent': wearableConsent,
+    if (consentAt != null) 'consentAt': consentAt!.toIso8601String(),
+    if (aiComment != null) 'aiComment': aiComment,
+    if (aiCommentAt != null) 'aiCommentAt': aiCommentAt!.toIso8601String(),
+    if (aiCommentFormat != null) 'aiCommentFormat': aiCommentFormat,
+    if (roster != null) 'roster': [for (final s in roster!) s.name],
+    if (rosterStartDate != null)
+      'rosterStartDate': rosterStartDate!.toIso8601String(),
+    // 무한정 쌓이면 안 되니 최근 것만 — 홈은 가장 최근 1건만 쓴다.
+    'bedtimeIntents': [
+      for (final i in bedtimeIntents.take(60))
+        {'at': i.at.toIso8601String(), 'note': i.note},
+    ],
+    'wakeIntents': [
+      for (final i in wakeIntents.take(60)) {'at': i.at.toIso8601String()},
+    ],
+    'dailyCheckIns': [
+      for (final entry in dailyCheckIns.take(90))
+        {
+          'at': entry.at.toIso8601String(),
+          'tags': entry.tags,
+          'note': entry.note,
+        },
+    ],
+    'syncedHealthMetrics': [
+      for (final metric in syncedHealthMetrics)
+        {
+          'date': metric.date.toIso8601String(),
+          'sleepStart': metric.sleepStart.toIso8601String(),
+          'sleepEnd': metric.sleepEnd.toIso8601String(),
+          'sleepMinutes': metric.sleepMinutes,
+          'hrvZ': metric.hrvZ,
+          'restingHeartRate': metric.restingHeartRate,
+          'source': metric.source,
+        },
+    ],
+  };
 
   void _applyJson(Map<String, dynamic> json) {
     userName = json['userName'] as String?;
     userEmail = json['userEmail'] as String?;
+    isDemoAccount = json['isDemoAccount'] as bool? ?? false;
 
     final timings = json['shiftTimings'] as Map<String, dynamic>?;
     shiftTimings = timings == null
@@ -416,9 +592,13 @@ class AppState extends ChangeNotifier {
     caffeineCutoff = _fromMinutes(json['caffeineCutoffMin'] as int? ?? 14 * 60);
     caffeineServings = json['caffeineServings'] as int? ?? 1;
     skinType = json['skinType'] as String? ?? 'combination';
-    skinConcerns = [for (final value in (json['skinConcerns'] as List? ?? [])) value as String];
+    skinConcerns = [
+      for (final value in (json['skinConcerns'] as List? ?? []))
+        value as String,
+    ];
     skinSensitivities = [
-      for (final value in (json['skinSensitivities'] as List? ?? [])) value as String,
+      for (final value in (json['skinSensitivities'] as List? ?? []))
+        value as String,
     ];
     privacyConsent = json['privacyConsent'] as bool? ?? false;
     aiConsent = json['aiConsent'] as bool? ?? false;
@@ -459,8 +639,24 @@ class AppState extends ChangeNotifier {
         for (final raw in (json['dailyCheckIns'] as List? ?? []))
           DailyCheckIn(
             at: DateTime.parse((raw as Map)['at'] as String),
-            tags: [for (final tag in (raw['tags'] as List? ?? [])) tag as String],
+            tags: [
+              for (final tag in (raw['tags'] as List? ?? [])) tag as String,
+            ],
             note: raw['note'] as String? ?? '',
+          ),
+      ]);
+    syncedHealthMetrics
+      ..clear()
+      ..addAll([
+        for (final raw in (json['syncedHealthMetrics'] as List? ?? []))
+          SyncedHealthMetric(
+            date: DateTime.parse((raw as Map)['date'] as String),
+            sleepStart: DateTime.parse(raw['sleepStart'] as String),
+            sleepEnd: DateTime.parse(raw['sleepEnd'] as String),
+            sleepMinutes: raw['sleepMinutes'] as int,
+            hrvZ: (raw['hrvZ'] as num?)?.toDouble(),
+            restingHeartRate: (raw['restingHeartRate'] as num?)?.toDouble(),
+            source: raw['source'] as String? ?? 'demo_watch',
           ),
       ]);
   }

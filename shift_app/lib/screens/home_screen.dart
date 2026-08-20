@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
 import '../engine/alertness_service.dart';
 import '../engine/gap_service.dart';
 import '../engine/nudge_service.dart';
@@ -21,7 +22,12 @@ import 'settings_screen.dart';
 /// null로 통일한다(§6-3-c와 같은 원칙: 선택 데이터라 실패해도 화면을 막지
 /// 않는다).
 class _RecoveryStats {
-  const _RecoveryStats({this.sleepDuration, this.hrvZScore, this.restingBpm, this.daylightMinutes});
+  const _RecoveryStats({
+    this.sleepDuration,
+    this.hrvZScore,
+    this.restingBpm,
+    this.daylightMinutes,
+  });
   final Duration? sleepDuration;
   final double? hrvZScore;
   final double? restingBpm;
@@ -48,12 +54,18 @@ Future<_RecoveryStats> _fetchRecovery(HealthSignalSource source) async {
   final sessions = await source.sleepSessions(DateRange(since, now));
   final hrv = await source.hrvNormalized(DateRange(since, now));
   final restingHr = await source.restingHeartRate(DateRange(since, now));
-  final daylight = source.capabilities.hasDaylight ? await source.daylight(DateRange(today, now)) : null;
+  final daylight = source.capabilities.hasDaylight
+      ? await source.daylight(DateRange(today, now))
+      : null;
 
   return _RecoveryStats(
-    sleepDuration: sessions.isEmpty ? null : sessions.last.end.difference(sessions.last.start),
+    sleepDuration: sessions.isEmpty
+        ? null
+        : sessions.last.end.difference(sessions.last.start),
     hrvZScore: hrv == null || hrv.points.isEmpty ? null : hrv.points.last.$2,
-    restingBpm: restingHr == null || restingHr.points.isEmpty ? null : restingHr.points.last.$2,
+    restingBpm: restingHr == null || restingHr.points.isEmpty
+        ? null
+        : restingHr.points.last.$2,
     daylightMinutes: daylight == null || daylight.points.isEmpty
         ? null
         : daylight.points.fold<double>(0.0, (sum, p) => sum + p.$2),
@@ -67,7 +79,8 @@ String _formatSleep(Duration? d) {
   return '${h}h ${m}m';
 }
 
-String _formatHrv(double? z) => z == null ? '—' : '${z >= 0 ? '+' : ''}${z.toStringAsFixed(1)}σ';
+String _formatHrv(double? z) =>
+    z == null ? '—' : '${z >= 0 ? '+' : ''}${z.toStringAsFixed(1)}σ';
 
 String _formatBpm(double? bpm) => bpm == null ? '—' : '${bpm.round()}bpm';
 
@@ -78,7 +91,8 @@ String _formatDaylight(double? minutes) {
 }
 
 const _weekdaysKo = ['월', '화', '수', '목', '금', '토', '일'];
-String _formatTodayKo(DateTime d) => '${d.month}월 ${d.day}일 ${_weekdaysKo[d.weekday - 1]}요일';
+String _formatTodayKo(DateTime d) =>
+    '${d.month}월 ${d.day}일 ${_weekdaysKo[d.weekday - 1]}요일';
 String _fmtTime(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
@@ -111,12 +125,15 @@ class _HomeScreenState extends State<HomeScreen> {
   late Future<TodayNudges> _future;
   late Future<AlertnessResult> _alertFuture;
   late Future<List<SleepDurationDay>> _sleepDurationFuture;
-  late final HealthSignalSource _healthSource = widget.healthSource ??
-      (kDebugMode
-          ? const DemoHealthSource()
+  late final HealthSignalSource _healthSource =
+      widget.healthSource ??
+      (AppState.instance.isDemoAccount || kDebugMode
+          ? (AppState.instance.isDemoAccount
+                ? const SyncedHealthSource()
+                : const DemoHealthSource())
           : defaultTargetPlatform == TargetPlatform.android
-              ? AndroidHealthSource()
-              : IosHealthSource());
+          ? AndroidHealthSource()
+          : IosHealthSource());
   late Future<_RecoveryStats> _recoveryFuture;
 
   // 행동별 완료 체크 — 인메모리 상태다(§ AppState와 동일하게 영구저장 전까지는
@@ -128,8 +145,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _future = loadTodayNudges();
     _alertFuture = loadAlertness();
-    _sleepDurationFuture =
-        _alertFuture.then((r) => sleepDurationSeries(roster: r.roster));
+    _sleepDurationFuture = _alertFuture.then(
+      (r) => sleepDurationSeries(roster: r.roster),
+    );
     _recoveryFuture = _loadRecovery(_healthSource);
   }
 
@@ -164,9 +182,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(_formatTodayKo(DateTime.now()),
-                                style: AppTypography.caption01
-                                    .copyWith(color: AppColors.textTertiary)),
+                            Text(
+                              _formatTodayKo(DateTime.now()),
+                              style: AppTypography.caption01.copyWith(
+                                color: AppColors.textTertiary,
+                              ),
+                            ),
                             const SizedBox(height: 4),
                             Text(
                               '안녕하세요, ${AppState.instance.userName ?? '게스트'}님',
@@ -185,7 +206,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         icon: Icons.settings_rounded,
                         tooltip: '설정',
                         onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const SettingsScreen(),
+                          ),
                         ),
                       ),
                     ],
@@ -195,9 +218,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     SizedBox(
                       height: 160,
                       child: Center(
-                        child: Text('오늘의 계획을 불러오지 못했어요\n${snapshot.error}',
-                            textAlign: TextAlign.center,
-                            style: AppTypography.body02.copyWith(color: AppColors.error01)),
+                        child: Text(
+                          '오늘의 계획을 불러오지 못했어요\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: AppTypography.body02.copyWith(
+                            color: AppColors.error01,
+                          ),
+                        ),
                       ),
                     )
                   else if (data == null)
@@ -211,10 +238,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       data: data,
                       completedActions: _completedActions,
                       onToggleAction: (i) => setState(() {
-                        if (!_completedActions.add(i)) _completedActions.remove(i);
+                        if (!_completedActions.add(i)) {
+                          _completedActions.remove(i);
+                        }
                       }),
-                      onLogBedtime: () => setState(() => AppState.instance.logBedtimeIntent()),
-                      onLogWake: () => setState(() => AppState.instance.logWakeIntent()),
+                      onLogBedtime: () =>
+                          setState(() => AppState.instance.logBedtimeIntent()),
+                      onLogWake: () =>
+                          setState(() => AppState.instance.logWakeIntent()),
                     ),
                   FutureBuilder<AlertnessResult>(
                     future: _alertFuture,
@@ -227,11 +258,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(AppSpacing.md),
                           decoration: BoxDecoration(
-                            color: AppColors.information03.withValues(alpha: 0.5),
+                            color: AppColors.information03.withValues(
+                              alpha: 0.5,
+                            ),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text('지금이 오늘 중 컨디션이 가장 낮은 시간대예요',
-                              style: AppTypography.caption01.copyWith(color: AppColors.textPrimary)),
+                          child: Text(
+                            '지금이 오늘 중 컨디션이 가장 낮은 시간대예요',
+                            style: AppTypography.caption01.copyWith(
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -242,8 +279,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   FutureBuilder<_RecoveryStats>(
                     future: _recoveryFuture,
                     builder: (context, recoverySnapshot) {
-                      final stats = recoverySnapshot.data ?? _RecoveryStats.empty;
-                      final showDaylight = _healthSource.capabilities.hasDaylight;
+                      final stats =
+                          recoverySnapshot.data ?? _RecoveryStats.empty;
+                      final showDaylight =
+                          _healthSource.capabilities.hasDaylight;
                       return Row(
                         children: [
                           Expanded(
@@ -254,27 +293,40 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: AppSpacing.sm),
                           Expanded(
-                            child: _RecoveryTile(label: 'HRV', value: _formatHrv(stats.hrvZScore)),
+                            child: _RecoveryTile(
+                              label: 'HRV',
+                              value: _formatHrv(stats.hrvZScore),
+                            ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
                           Expanded(
-                            child: _RecoveryTile(label: '안정심박', value: _formatBpm(stats.restingBpm)),
+                            child: _RecoveryTile(
+                              label: '안정심박',
+                              value: _formatBpm(stats.restingBpm),
+                            ),
                           ),
                           if (showDaylight) ...[
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
-                              child: _RecoveryTile(label: '일광 노출', value: _formatDaylight(stats.daylightMinutes)),
+                              child: _RecoveryTile(
+                                label: '일광 노출',
+                                value: _formatDaylight(stats.daylightMinutes),
+                              ),
                             ),
                           ],
                         ],
                       );
                     },
                   ),
-                  const SizedBox(height: AppSpacing.xxl),
+                  const _HomeSectionDivider(),
                   Text('최근 2주 권장 수면량', style: AppTypography.subtitle04),
                   const SizedBox(height: 4),
-                  Text('근무와 누적 부족분을 반영한 권장량 대비 실제 수면',
-                      style: AppTypography.caption02.copyWith(color: AppColors.textTertiary)),
+                  Text(
+                    '근무와 누적 부족분을 반영한 권장량 대비 실제 수면',
+                    style: AppTypography.caption02.copyWith(
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   AppCard(
                     child: FutureBuilder<List<SleepDurationDay>>(
@@ -299,7 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   // AI 인사이트와 피부 루틴은 별도 화면으로 들어가야
                   // 볼 수 있었다 — 탭 두 번을 없애고 여기 바로 편다.
-                  const SizedBox(height: AppSpacing.xxl),
+                  const _HomeSectionDivider(),
                   FutureBuilder<AlertnessResult>(
                     future: _alertFuture,
                     builder: (context, snap) {
@@ -326,9 +378,14 @@ class _SleepDurationChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final averageTarget = days.fold<int>(0, (sum, d) => sum + d.targetMinutes) ~/ days.length;
-    final averageActual = days.fold<int>(0, (sum, d) => sum + d.actualMinutes) ~/ days.length;
-    final totalDeficit = days.fold<int>(0, (sum, d) => sum + (d.deficitMinutes > 0 ? d.deficitMinutes : 0));
+    final averageTarget =
+        days.fold<int>(0, (sum, d) => sum + d.targetMinutes) ~/ days.length;
+    final averageActual =
+        days.fold<int>(0, (sum, d) => sum + d.actualMinutes) ~/ days.length;
+    final totalDeficit = days.fold<int>(
+      0,
+      (sum, d) => sum + (d.deficitMinutes > 0 ? d.deficitMinutes : 0),
+    );
     final maxSleep = days
         .expand((d) => [d.targetMinutes, d.actualMinutes])
         .fold<int>(8 * 60, (a, b) => a > b ? a : b);
@@ -341,9 +398,15 @@ class _SleepDurationChart extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: _SleepSummary(label: '평균 권장', minutes: averageTarget)),
-              Expanded(child: _SleepSummary(label: '평균 실제', minutes: averageActual)),
-              Expanded(child: _SleepSummary(label: '누적 부족', minutes: totalDeficit)),
+              Expanded(
+                child: _SleepSummary(label: '평균 권장', minutes: averageTarget),
+              ),
+              Expanded(
+                child: _SleepSummary(label: '평균 실제', minutes: averageActual),
+              ),
+              Expanded(
+                child: _SleepSummary(label: '누적 부족', minutes: totalDeficit),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -358,75 +421,96 @@ class _SleepDurationChart extends StatelessWidget {
           Expanded(
             child: BarChart(
               BarChartData(
-          minY: 0,
-          maxY: bound,
-          alignment: BarChartAlignment.spaceAround,
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            horizontalInterval: 120,
-            getDrawingHorizontalLine: (_) =>
-                const FlLine(color: AppColors.gray100, strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          extraLinesData: ExtraLinesData(horizontalLines: [
-            HorizontalLine(y: 0, color: AppColors.gray300, strokeWidth: 1.5),
-          ]),
-          titlesData: FlTitlesData(
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 34,
-                interval: 120,
-                getTitlesWidget: (value, meta) => Text(
-                  value == 0 ? '0' : '${(value / 60).round()}h',
-                  style: AppTypography.caption03
-                      .copyWith(color: AppColors.textPlaceholder),
+                minY: 0,
+                maxY: bound,
+                alignment: BarChartAlignment.spaceAround,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 120,
+                  getDrawingHorizontalLine: (_) =>
+                      const FlLine(color: AppColors.gray100, strokeWidth: 1),
                 ),
-              ),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 20,
-                getTitlesWidget: (value, meta) {
-                  final day = value.round() + 1;
-                  final show = day == 1 || day == 5 || day == 9 || day == days.length;
-                  return Text(show ? '$day일' : '',
-                      style: AppTypography.caption03
-                          .copyWith(color: AppColors.textPlaceholder));
-                },
-              ),
-            ),
-          ),
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(_sleepTooltip(days[group.x]), AppTypography.caption02),
-            ),
-          ),
-          barGroups: [
-            for (var i = 0; i < days.length; i++)
-              BarChartGroupData(
-                x: i,
-                barRods: [
-                  BarChartRodData(
-                    toY: days[i].targetMinutes.toDouble(),
-                    width: 7,
-                    color: AppColors.gray300,
-                    borderRadius: BorderRadius.circular(4),
+                borderData: FlBorderData(show: false),
+                extraLinesData: ExtraLinesData(
+                  horizontalLines: [
+                    HorizontalLine(
+                      y: 0,
+                      color: AppColors.gray300,
+                      strokeWidth: 1.5,
+                    ),
+                  ],
+                ),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
                   ),
-                  BarChartRodData(
-                    toY: days[i].actualMinutes.toDouble(),
-                    width: 7,
-                    color: AppColors.primary500,
-                    borderRadius: BorderRadius.circular(4),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
                   ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 34,
+                      interval: 120,
+                      getTitlesWidget: (value, meta) => Text(
+                        value == 0 ? '0' : '${(value / 60).round()}h',
+                        style: AppTypography.caption03.copyWith(
+                          color: AppColors.textPlaceholder,
+                        ),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 20,
+                      getTitlesWidget: (value, meta) {
+                        final day = value.round() + 1;
+                        final show =
+                            day == 1 ||
+                            day == 5 ||
+                            day == 9 ||
+                            day == days.length;
+                        return Text(
+                          show ? '$day일' : '',
+                          style: AppTypography.caption03.copyWith(
+                            color: AppColors.textPlaceholder,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                        BarTooltipItem(
+                          _sleepTooltip(days[group.x]),
+                          AppTypography.caption02,
+                        ),
+                  ),
+                ),
+                barGroups: [
+                  for (var i = 0; i < days.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: days[i].targetMinutes.toDouble(),
+                          width: 7,
+                          color: AppColors.gray300,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        BarChartRodData(
+                          toY: days[i].actualMinutes.toDouble(),
+                          width: 7,
+                          color: AppColors.primary500,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ],
+                    ),
                 ],
-              ),
-          ],
               ),
             ),
           ),
@@ -459,7 +543,12 @@ class _SleepSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+        Text(
+          label,
+          style: AppTypography.caption03.copyWith(
+            color: AppColors.textTertiary,
+          ),
+        ),
         const SizedBox(height: 2),
         Text(_durationLabel(minutes), style: AppTypography.subtitle04),
       ],
@@ -486,9 +575,26 @@ class _SleepLegend extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 5),
-        Text(label,
-            style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+        Text(
+          label,
+          style: AppTypography.caption03.copyWith(
+            color: AppColors.textTertiary,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _HomeSectionDivider extends StatelessWidget {
+  const _HomeSectionDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 1,
+      margin: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+      color: AppColors.gray200,
     );
   }
 }
@@ -519,8 +625,16 @@ class _TodayContent extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.xxl),
           decoration: BoxDecoration(
-            color: AppColors.gray800,
+            color: AppColors.grayWhite,
             borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.gray100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,12 +642,18 @@ class _TodayContent extends StatelessWidget {
               Text(
                 data.headerLabel,
                 style: AppTypography.caption01.copyWith(
-                  color: isNight ? AppColors.information03 : AppColors.primary400,
+                  color: isNight
+                      ? AppColors.information01
+                      : AppColors.primary900,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(data.planLabel,
-                  style: AppTypography.heading01.copyWith(color: AppColors.grayWhite)),
+              Text(
+                data.planLabel,
+                style: AppTypography.heading01.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
               const SizedBox(height: AppSpacing.md),
               _InsightSection(fallback: data.summary),
               const SizedBox(height: AppSpacing.lg),
@@ -541,9 +661,12 @@ class _TodayContent extends StatelessWidget {
                 width: double.infinity,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.grayWhite,
-                    side: const BorderSide(color: AppColors.gray600),
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    foregroundColor: AppColors.textPrimary,
+                    backgroundColor: AppColors.gray50,
+                    side: const BorderSide(color: AppColors.gray200),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.md,
+                    ),
                   ),
                   onPressed: AppState.instance.hasOpenManualSleep
                       ? onLogWake
@@ -573,7 +696,9 @@ class _TodayContent extends StatelessWidget {
                   AppState.instance.hasOpenManualSleep
                       ? '${_fmtTime(AppState.instance.bedtimeIntents.first.at)}부터 수면 시작으로 기록 중이에요'
                       : _manualSleepSummary(AppState.instance),
-                  style: AppTypography.caption03.copyWith(color: AppColors.gray400),
+                  style: AppTypography.caption03.copyWith(
+                    color: AppColors.textTertiary,
+                  ),
                 ),
               ],
             ],
@@ -583,8 +708,10 @@ class _TodayContent extends StatelessWidget {
         Text('오늘의 행동', style: AppTypography.subtitle04),
         const SizedBox(height: AppSpacing.sm),
         if (data.actions.isEmpty)
-          Text('지금 시점에 남은 넛지가 없어요.',
-              style: AppTypography.body02.copyWith(color: AppColors.textTertiary))
+          Text(
+            '지금 시점에 남은 넛지가 없어요.',
+            style: AppTypography.body02.copyWith(color: AppColors.textTertiary),
+          )
         else
           AppCard(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -641,7 +768,11 @@ class _HeaderIconButton extends StatelessWidget {
 /// 구분해달라는 요청 — 놓침은 이 앱의 핵심 가치(타이밍이 곧 효과, §7-2)를
 /// 살리려고 단순 완료/미완료 대신 넣었다.
 class _ActionRow extends StatelessWidget {
-  const _ActionRow({required this.action, required this.completed, required this.onToggle});
+  const _ActionRow({
+    required this.action,
+    required this.completed,
+    required this.onToggle,
+  });
   final NudgeAction action;
   final bool completed;
   final VoidCallback onToggle;
@@ -654,7 +785,9 @@ class _ActionRow extends StatelessWidget {
         ? AppColors.success01
         : (missed ? AppColors.error01 : AppColors.textTertiary);
     final textColor = completed ? AppColors.gray400 : AppColors.textPrimary;
-    final textDecoration = completed ? TextDecoration.lineThrough : TextDecoration.none;
+    final textDecoration = completed
+        ? TextDecoration.lineThrough
+        : TextDecoration.none;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
@@ -666,14 +799,23 @@ class _ActionRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(action.time,
-                    style: AppTypography.body02.copyWith(
-                        color: completed ? AppColors.gray400 : AppColors.textPrimary,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  action.time,
+                  style: AppTypography.body02.copyWith(
+                    color: completed
+                        ? AppColors.gray400
+                        : AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(statusLabel,
-                    style: AppTypography.caption03
-                        .copyWith(color: statusColor, fontWeight: FontWeight.w600)),
+                Text(
+                  statusLabel,
+                  style: AppTypography.caption03.copyWith(
+                    color: statusColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -682,21 +824,34 @@ class _ActionRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(action.label,
-                    style: AppTypography.body02
-                        .copyWith(color: textColor, decoration: textDecoration)),
+                Text(
+                  action.label,
+                  style: AppTypography.body02.copyWith(
+                    color: textColor,
+                    decoration: textDecoration,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(action.message,
-                    style: AppTypography.caption02.copyWith(
-                        color: completed ? AppColors.gray400 : AppColors.textTertiary,
-                        decoration: textDecoration)),
+                Text(
+                  action.message,
+                  style: AppTypography.caption02.copyWith(
+                    color: completed
+                        ? AppColors.gray400
+                        : AppColors.textTertiary,
+                    decoration: textDecoration,
+                  ),
+                ),
               ],
             ),
           ),
           OutlinedButton(
             style: OutlinedButton.styleFrom(
-              foregroundColor: completed ? AppColors.success01 : AppColors.textSecondary,
-              side: BorderSide(color: completed ? AppColors.success01 : AppColors.gray200),
+              foregroundColor: completed
+                  ? AppColors.success01
+                  : AppColors.textSecondary,
+              side: BorderSide(
+                color: completed ? AppColors.success01 : AppColors.gray200,
+              ),
               minimumSize: const Size(52, 36),
             ),
             onPressed: onToggle,
@@ -721,11 +876,19 @@ class _RecoveryTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       child: Column(
         children: [
-          Text(label,
-              style: AppTypography.caption02
-                  .copyWith(color: AppColors.textTertiary)),
+          Text(
+            label,
+            style: AppTypography.caption02.copyWith(
+              color: AppColors.textTertiary,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(value, style: AppTypography.subtitle03.copyWith(color: AppColors.textPrimary)),
+          Text(
+            value,
+            style: AppTypography.subtitle03.copyWith(
+              color: AppColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );
@@ -815,24 +978,32 @@ class _InsightSectionState extends State<_InsightSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(color: AppColors.gray600, height: 1),
+          const Divider(color: AppColors.gray100, height: 1),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              const Icon(Icons.auto_awesome_rounded,
-                  color: AppColors.primary500, size: 17),
+              const Icon(
+                Icons.auto_awesome_rounded,
+                color: AppColors.primary500,
+                size: 17,
+              ),
               const SizedBox(width: AppSpacing.sm),
-              Text('AI 오늘의 한 줄',
-                  style: AppTypography.caption02.copyWith(
-                    color: AppColors.primary400,
-                    fontWeight: FontWeight.w700,
-                  )),
+              Text(
+                'AI 오늘의 한 줄',
+                style: AppTypography.caption02.copyWith(
+                  color: AppColors.primary900,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const Spacer(),
               if (s.aiConsent)
                 GestureDetector(
                   onTap: _refreshInsight,
-                  child: const Icon(Icons.refresh_rounded,
-                      color: AppColors.gray400, size: 17),
+                  child: const Icon(
+                    Icons.refresh_rounded,
+                    color: AppColors.textTertiary,
+                    size: 17,
+                  ),
                 ),
             ],
           ),
@@ -842,9 +1013,9 @@ class _InsightSectionState extends State<_InsightSection> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.gray100,
-                  backgroundColor: AppColors.gray800,
-                  side: const BorderSide(color: AppColors.gray500),
+                  foregroundColor: AppColors.textPrimary,
+                  backgroundColor: AppColors.gray50,
+                  side: const BorderSide(color: AppColors.gray200),
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -858,9 +1029,13 @@ class _InsightSectionState extends State<_InsightSection> {
               ),
             )
           else if (s.hasFreshAiComment)
-            Text(s.aiComment!,
-                style: AppTypography.body02
-                    .copyWith(color: AppColors.grayWhite, height: 1.5))
+            Text(
+              s.aiComment!,
+              style: AppTypography.body02.copyWith(
+                color: AppColors.textPrimary,
+                height: 1.5,
+              ),
+            )
           else
             FutureBuilder<String>(
               future: _future,
@@ -870,13 +1045,15 @@ class _InsightSectionState extends State<_InsightSection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(text,
-                          style: AppTypography.body02.copyWith(
-                            color: snap.hasError
-                                ? AppColors.gray300
-                                : AppColors.grayWhite,
-                            height: 1.5,
-                          )),
+                      child: Text(
+                        text,
+                        style: AppTypography.body02.copyWith(
+                          color: snap.hasError
+                              ? AppColors.error01
+                              : AppColors.textPrimary,
+                          height: 1.5,
+                        ),
+                      ),
                     ),
                     if (snap.connectionState == ConnectionState.waiting) ...[
                       const SizedBox(width: AppSpacing.sm),
@@ -900,8 +1077,8 @@ class _InsightSectionState extends State<_InsightSection> {
                 Expanded(
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.grayWhite,
-                      side: const BorderSide(color: AppColors.gray500),
+                      foregroundColor: AppColors.textPrimary,
+                      side: const BorderSide(color: AppColors.gray200),
                       padding: const EdgeInsets.symmetric(
                         vertical: AppSpacing.sm,
                       ),
@@ -915,7 +1092,9 @@ class _InsightSectionState extends State<_InsightSection> {
                       useSafeArea: true,
                       backgroundColor: AppColors.grayWhite,
                       shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
                       ),
                       builder: (_) => const _QuickAdviceSheet(),
                     ),
@@ -923,17 +1102,14 @@ class _InsightSectionState extends State<_InsightSection> {
                       Icons.chat_bubble_outline_rounded,
                       size: 16,
                     ),
-                    label: Text(
-                      '상태·고민 전달',
-                      style: AppTypography.caption02,
-                    ),
+                    label: Text('상태·고민 전달', style: AppTypography.caption02),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: TextButton.icon(
                     style: TextButton.styleFrom(
-                      foregroundColor: AppColors.gray200,
+                      foregroundColor: AppColors.textSecondary,
                       padding: const EdgeInsets.symmetric(
                         vertical: AppSpacing.sm,
                       ),
@@ -942,15 +1118,10 @@ class _InsightSectionState extends State<_InsightSection> {
                       ),
                     ),
                     onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const AiReportScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const AiReportScreen()),
                     ),
                     icon: const Icon(Icons.insights_outlined, size: 16),
-                    label: Text(
-                      '리듬 자세히 보기',
-                      style: AppTypography.caption02,
-                    ),
+                    label: Text('리듬 자세히 보기', style: AppTypography.caption02),
                   ),
                 ),
               ],
@@ -985,21 +1156,21 @@ class _QuickAdviceSheetState extends State<_QuickAdviceSheet> {
     final typed = _controller.text.trim();
     final note = [..._selected, if (typed.isNotEmpty) typed].join(', ');
     if (note.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('오늘 상태나 고민을 하나 이상 알려주세요.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('오늘 상태나 고민을 하나 이상 알려주세요.')));
       return;
     }
     setState(() {
       _loading = true;
     });
     try {
-      AppState.instance.saveDailyCheckIn(
-        tags: _selected.toList(),
-        note: typed,
-      );
+      AppState.instance.saveDailyCheckIn(tags: _selected.toList(), note: typed);
       try {
-        await AuthService.saveDailyCheckIn(tags: _selected.toList(), note: typed);
+        await AuthService.saveDailyCheckIn(
+          tags: _selected.toList(),
+          note: typed,
+        );
       } catch (_) {
         // AI 답변은 서버 체크인 동기화 실패와 별개로 계속 제공한다.
       }
@@ -1010,7 +1181,9 @@ class _QuickAdviceSheetState extends State<_QuickAdviceSheet> {
         stateNote: note,
       );
       if (!mounted) return;
-      final nightCount = rhythm.roster.where((shift) => shift.name == 'night').length;
+      final nightCount = rhythm.roster
+          .where((shift) => shift.name == 'night')
+          .length;
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => QuickAdviceResultScreen(
@@ -1058,7 +1231,9 @@ class _QuickAdviceSheetState extends State<_QuickAdviceSheet> {
             const SizedBox(height: 4),
             Text(
               '근무와 수면 리듬을 함께 읽고 지금 할 수 있는 행동을 제안해드려요.',
-              style: AppTypography.caption02.copyWith(color: AppColors.textTertiary),
+              style: AppTypography.caption02.copyWith(
+                color: AppColors.textTertiary,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             Wrap(
@@ -1084,7 +1259,9 @@ class _QuickAdviceSheetState extends State<_QuickAdviceSheet> {
               maxLength: stateNoteMaxLength,
               decoration: InputDecoration(
                 hintText: '예: 귀와 턱 주변 트러블이 반복되고 잠도 자주 깨요',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.md),
@@ -1122,9 +1299,12 @@ class _SkinRoutineSection extends StatelessWidget {
       children: [
         Text('피부 루틴', style: AppTypography.subtitle04),
         const SizedBox(height: 4),
-        Text('벽시계의 AM·PM 대신, 내 근무와 수면에 맞춘 생체 루틴',
-            style: AppTypography.caption02
-                .copyWith(color: AppColors.textTertiary)),
+        Text(
+          '벽시계의 AM·PM 대신, 내 근무와 수면에 맞춘 생체 루틴',
+          style: AppTypography.caption02.copyWith(
+            color: AppColors.textTertiary,
+          ),
+        ),
         const SizedBox(height: AppSpacing.sm),
         Container(
           width: double.infinity,
@@ -1138,8 +1318,11 @@ class _SkinRoutineSection extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.auto_awesome_rounded,
-                      color: AppColors.primary900, size: 20),
+                  const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppColors.primary900,
+                    size: 20,
+                  ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
@@ -1170,8 +1353,11 @@ class _SkinRoutineSection extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.bedtime_outlined,
-                          color: AppColors.primary900, size: 18),
+                      const Icon(
+                        Icons.bedtime_outlined,
+                        color: AppColors.primary900,
+                        size: 18,
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
@@ -1200,8 +1386,11 @@ class _SkinRoutineSection extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_month_rounded,
-                          color: AppColors.textSecondary, size: 18),
+                      const Icon(
+                        Icons.calendar_month_rounded,
+                        color: AppColors.textSecondary,
+                        size: 18,
+                      ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
@@ -1221,6 +1410,7 @@ class _SkinRoutineSection extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         AppCard(
+          elevated: true,
           child: Column(
             children: [
               _RoutineRow(
@@ -1268,28 +1458,62 @@ class _SkinRoutineSection extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('AAC 제품 연동 데모',
-                    style: AppTypography.caption02
-                        .copyWith(color: AppColors.primary900)),
+                Text(
+                  'AAC 제품 연동 데모',
+                  style: AppTypography.caption02.copyWith(
+                    color: AppColors.primary900,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('나이트 ${routine.upcomingNightCount}회 준비 키트',
-                    style: AppTypography.subtitle04
-                        .copyWith(color: AppColors.textPrimary)),
+                Text(
+                  '나이트 ${routine.upcomingNightCount}회 준비 키트',
+                  style: AppTypography.subtitle04.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.sm),
-                Text('순한 클렌저 · 진정/장벽 보습 · 휴대용 선케어',
-                    style: AppTypography.body02
-                        .copyWith(color: AppColors.textSecondary)),
+                Text(
+                  '순한 클렌저 · 진정/장벽 보습 · 휴대용 선케어',
+                  style: AppTypography.body02.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.md),
                 SizedBox(
                   height: 154,
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     children: const [
-                      _HomeDemoProduct(Icons.water_drop_outlined, '클렌저', 'Calm Wash', Color(0xFFDDEEFF)),
-                      _HomeDemoProduct(Icons.spa_outlined, '미스트', 'Reset Mist', Color(0xFFE4F2E8)),
-                      _HomeDemoProduct(Icons.science_outlined, '세럼', 'Barrier Drop', Color(0xFFFFE7D7)),
-                      _HomeDemoProduct(Icons.bubble_chart_outlined, '크림', 'Night Shield', Color(0xFFE8E4F5)),
-                      _HomeDemoProduct(Icons.wb_sunny_outlined, '선케어', 'SleepReady UV', Color(0xFFFFF0C8)),
+                      _HomeDemoProduct(
+                        Icons.water_drop_outlined,
+                        '클렌저',
+                        'Calm Wash',
+                        Color(0xFFDDEEFF),
+                      ),
+                      _HomeDemoProduct(
+                        Icons.spa_outlined,
+                        '미스트',
+                        'Reset Mist',
+                        Color(0xFFE4F2E8),
+                      ),
+                      _HomeDemoProduct(
+                        Icons.science_outlined,
+                        '세럼',
+                        'Barrier Drop',
+                        Color(0xFFFFE7D7),
+                      ),
+                      _HomeDemoProduct(
+                        Icons.bubble_chart_outlined,
+                        '크림',
+                        'Night Shield',
+                        Color(0xFFE8E4F5),
+                      ),
+                      _HomeDemoProduct(
+                        Icons.wb_sunny_outlined,
+                        '선케어',
+                        'SleepReady UV',
+                        Color(0xFFFFF0C8),
+                      ),
                     ],
                   ),
                 ),
@@ -1322,10 +1546,7 @@ class _RoutineRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: 58,
-          child: Text(time, style: AppTypography.subtitle03),
-        ),
+        SizedBox(width: 58, child: Text(time, style: AppTypography.subtitle03)),
         const SizedBox(width: AppSpacing.md),
         Expanded(
           child: Column(
@@ -1333,15 +1554,20 @@ class _RoutineRow extends StatelessWidget {
             children: [
               Text(title, style: AppTypography.body02),
               const SizedBox(height: 2),
-              Text(desc,
-                  style: AppTypography.caption02
-                      .copyWith(color: AppColors.textTertiary)),
+              Text(
+                desc,
+                style: AppTypography.caption02.copyWith(
+                  color: AppColors.textTertiary,
+                ),
+              ),
               const SizedBox(height: AppSpacing.sm),
-              Text(reason,
-                  style: AppTypography.caption03.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  )),
+              Text(
+                reason,
+                style: AppTypography.caption03.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                ),
+              ),
               const SizedBox(height: AppSpacing.sm),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -1352,11 +1578,13 @@ class _RoutineRow extends StatelessWidget {
                   color: AppColors.primary50,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(productSlot,
-                    style: AppTypography.caption03.copyWith(
-                      color: AppColors.primary900,
-                      fontWeight: FontWeight.w700,
-                    )),
+                child: Text(
+                  productSlot,
+                  style: AppTypography.caption03.copyWith(
+                    color: AppColors.primary900,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1401,7 +1629,10 @@ class _HomeDemoProduct extends StatelessWidget {
                   top: 5,
                   right: 5,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.grayWhite,
                       borderRadius: BorderRadius.circular(6),
@@ -1413,9 +1644,20 @@ class _HomeDemoProduct extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 7),
-          Text(type, style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+          Text(
+            type,
+            style: AppTypography.caption03.copyWith(
+              color: AppColors.textTertiary,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(name, maxLines: 1, style: AppTypography.caption02.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            name,
+            maxLines: 1,
+            style: AppTypography.caption02.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
       ),
     );

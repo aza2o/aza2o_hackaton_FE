@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:shift_circadian_engine/roster/constants.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../state/app_state.dart';
@@ -8,8 +10,9 @@ import '../state/app_state.dart';
 // (shift_app/supabase/migrations/). 원 프로젝트 접근 가능해지면 다시
 // 합칠지 결정할 것.
 const _supabaseUrl = 'https://fthdvkrufjolrfuopvma.supabase.co';
-const _supabasePublishableKey =
-    String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+const _supabasePublishableKey = String.fromEnvironment(
+  'SUPABASE_PUBLISHABLE_KEY',
+);
 
 class AuthProfile {
   const AuthProfile({
@@ -39,10 +42,14 @@ class SignUpResult {
 class AuthService {
   AuthService._();
 
+  static const demoAccountId = 'demo@sleepready.app';
+  static const demoAccountPassword = 'SleepReady26!';
+
   static bool _initialized = false;
   static bool get isConfigured => _supabasePublishableKey.isNotEmpty;
   static bool get isAuthenticated =>
-      _initialized && Supabase.instance.client.auth.currentSession != null;
+      AppState.instance.isDemoAccount ||
+      (_initialized && Supabase.instance.client.auth.currentSession != null);
 
   static SupabaseClient get _client {
     if (!_initialized) {
@@ -82,12 +89,14 @@ class AuthService {
       throw AuthException('회원가입 결과를 확인하지 못했어요.');
     }
     if (response.session != null) {
-      _applyLocalProfile(AuthProfile(
-        name: name,
-        email: email,
-        privacyConsent: privacyConsent,
-        aiConsent: aiConsent,
-      ));
+      _applyLocalProfile(
+        AuthProfile(
+          name: name,
+          email: email,
+          privacyConsent: privacyConsent,
+          aiConsent: aiConsent,
+        ),
+      );
     }
     return SignUpResult(requiresEmailConfirmation: response.session == null);
   }
@@ -96,8 +105,24 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail == demoAccountId && password != demoAccountPassword) {
+      throw const AuthException('테스트 계정 비밀번호가 일치하지 않아요.');
+    }
+    if (normalizedEmail == demoAccountId && !isConfigured) {
+      await AppState.instance.seedDemoAccount();
+      return const AuthProfile(
+        name: '슬립레디 데모',
+        email: demoAccountId,
+        privacyConsent: true,
+        aiConsent: true,
+        skinType: 'combination',
+        skinConcerns: ['턱 트러블', '속건조', '칙칙함'],
+        skinSensitivities: ['향료', '반복 세안'],
+      );
+    }
     final response = await _client.auth.signInWithPassword(
-      email: email,
+      email: normalizedEmail,
       password: password,
     );
     if (response.user == null || response.session == null) {
@@ -106,20 +131,31 @@ class AuthService {
     final profile = await _loadProfile(response.user!);
     _applyLocalProfile(profile);
     await _restoreDailyCheckIns(response.user!.id);
+    if (normalizedEmail == demoAccountId) {
+      AppState.instance.setDemoAccountMode(true);
+      await _restoreDemoDataset(response.user!.id);
+    }
     return profile;
   }
 
   static Future<void> restoreLocalProfile() async {
+    if (AppState.instance.isDemoAccount) return;
     if (!isAuthenticated) return;
     final user = _client.auth.currentUser;
     if (user == null) return;
     final profile = await _loadProfile(user);
     _applyLocalProfile(profile);
     await _restoreDailyCheckIns(user.id);
+    if ((user.email ?? '').toLowerCase() == demoAccountId) {
+      AppState.instance.setDemoAccountMode(true);
+      await _restoreDemoDataset(user.id);
+    }
   }
 
   static Future<void> signOut() async {
-    if (isAuthenticated) await _client.auth.signOut();
+    if (_initialized && Supabase.instance.client.auth.currentSession != null) {
+      await _client.auth.signOut();
+    }
   }
 
   static Future<void> updateConsent({
@@ -128,16 +164,18 @@ class AuthService {
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
-    await _client.from('profiles').update({
-      'privacy_consent': privacyConsent,
-      'ai_consent': aiConsent,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', user.id);
+    await _client
+        .from('profiles')
+        .update({
+          'privacy_consent': privacyConsent,
+          'ai_consent': aiConsent,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', user.id);
     await _client.auth.updateUser(
-      UserAttributes(data: {
-        'privacy_consent': privacyConsent,
-        'ai_consent': aiConsent,
-      }),
+      UserAttributes(
+        data: {'privacy_consent': privacyConsent, 'ai_consent': aiConsent},
+      ),
     );
   }
 
@@ -149,12 +187,15 @@ class AuthService {
     if (!isAuthenticated) return;
     final user = _client.auth.currentUser;
     if (user == null) return;
-    await _client.from('profiles').update({
-      'skin_type': skinType,
-      'skin_concerns': concerns,
-      'skin_sensitivities': sensitivities,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', user.id);
+    await _client
+        .from('profiles')
+        .update({
+          'skin_type': skinType,
+          'skin_concerns': concerns,
+          'skin_sensitivities': sensitivities,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', user.id);
   }
 
   static Future<void> saveDailyCheckIn({
@@ -175,7 +216,9 @@ class AuthService {
     try {
       final row = await _client
           .from('profiles')
-          .select('name, email, privacy_consent, ai_consent, skin_type, skin_concerns, skin_sensitivities')
+          .select(
+            'name, email, privacy_consent, ai_consent, skin_type, skin_concerns, skin_sensitivities',
+          )
           .eq('id', user.id)
           .single();
       return AuthProfile(
@@ -184,8 +227,14 @@ class AuthService {
         privacyConsent: row['privacy_consent'] as bool? ?? false,
         aiConsent: row['ai_consent'] as bool? ?? false,
         skinType: row['skin_type'] as String? ?? 'combination',
-        skinConcerns: [for (final value in (row['skin_concerns'] as List? ?? [])) value as String],
-        skinSensitivities: [for (final value in (row['skin_sensitivities'] as List? ?? [])) value as String],
+        skinConcerns: [
+          for (final value in (row['skin_concerns'] as List? ?? []))
+            value as String,
+        ],
+        skinSensitivities: [
+          for (final value in (row['skin_sensitivities'] as List? ?? []))
+            value as String,
+        ],
       );
     } catch (_) {
       final metadata = user.userMetadata ?? const <String, dynamic>{};
@@ -195,14 +244,23 @@ class AuthService {
         privacyConsent: metadata['privacy_consent'] as bool? ?? false,
         aiConsent: metadata['ai_consent'] as bool? ?? false,
         skinType: metadata['skin_type'] as String? ?? 'combination',
-        skinConcerns: [for (final value in (metadata['skin_concerns'] as List? ?? [])) value as String],
-        skinSensitivities: [for (final value in (metadata['skin_sensitivities'] as List? ?? [])) value as String],
+        skinConcerns: [
+          for (final value in (metadata['skin_concerns'] as List? ?? []))
+            value as String,
+        ],
+        skinSensitivities: [
+          for (final value in (metadata['skin_sensitivities'] as List? ?? []))
+            value as String,
+        ],
       );
     }
   }
 
   static void _applyLocalProfile(AuthProfile profile) {
-    AppState.instance.setAuthenticatedUser(name: profile.name, email: profile.email);
+    AppState.instance.setAuthenticatedUser(
+      name: profile.name,
+      email: profile.email,
+    );
     AppState.instance.saveConsent(
       privacy: profile.privacyConsent,
       ai: profile.aiConsent,
@@ -226,12 +284,87 @@ class AuthService {
         for (final row in rows)
           DailyCheckIn(
             at: DateTime.parse(row['created_at'] as String),
-            tags: [for (final tag in (row['tags'] as List? ?? [])) tag as String],
+            tags: [
+              for (final tag in (row['tags'] as List? ?? [])) tag as String,
+            ],
             note: row['note'] as String? ?? '',
           ),
       ]);
     } catch (_) {
       // 테이블이 아직 배포되지 않았거나 오프라인이면 로컬 기록을 유지한다.
+    }
+  }
+
+  static Future<void> _restoreDemoDataset(String userId) async {
+    try {
+      final results = await Future.wait([
+        _client
+            .from('roster_entries')
+            .select('work_date, shift_type')
+            .eq('user_id', userId)
+            .order('work_date'),
+        _client
+            .from('health_daily_metrics')
+            .select(
+              'metric_date, sleep_start, sleep_end, sleep_minutes, hrv_z, resting_heart_rate, source',
+            )
+            .eq('user_id', userId)
+            .order('metric_date'),
+      ]);
+      final rosterRows = results[0];
+      final healthRows = results[1];
+
+      AppState.instance.saveOnboarding(
+        shiftTimings: const {
+          ShiftType.day: (
+            TimeOfDay(hour: 7, minute: 0),
+            TimeOfDay(hour: 15, minute: 0),
+          ),
+          ShiftType.evening: (
+            TimeOfDay(hour: 15, minute: 0),
+            TimeOfDay(hour: 23, minute: 0),
+          ),
+          ShiftType.night: (
+            TimeOfDay(hour: 23, minute: 0),
+            TimeOfDay(hour: 7, minute: 0),
+          ),
+        },
+        workplaceLighting: 'bright',
+        bedroomLighting: 'blackout',
+        chronotype: 'evening',
+        caffeineCutoff: const TimeOfDay(hour: 14, minute: 0),
+        caffeineServings: 2,
+      );
+
+      if (rosterRows.isNotEmpty) {
+        final firstDate = DateTime.parse(
+          rosterRows.first['work_date'] as String,
+        );
+        AppState.instance.saveRoster([
+          for (final row in rosterRows)
+            switch (row['shift_type'] as String) {
+              'D' => ShiftType.day,
+              'E' => ShiftType.evening,
+              'N' => ShiftType.night,
+              _ => ShiftType.off,
+            },
+        ], startDate: firstDate);
+      }
+
+      AppState.instance.replaceSyncedHealthMetrics([
+        for (final row in healthRows)
+          SyncedHealthMetric(
+            date: DateTime.parse(row['metric_date'] as String),
+            sleepStart: DateTime.parse(row['sleep_start'] as String),
+            sleepEnd: DateTime.parse(row['sleep_end'] as String),
+            sleepMinutes: row['sleep_minutes'] as int,
+            hrvZ: (row['hrv_z'] as num?)?.toDouble(),
+            restingHeartRate: (row['resting_heart_rate'] as num?)?.toDouble(),
+            source: row['source'] as String? ?? 'demo_watch',
+          ),
+      ]);
+    } catch (_) {
+      // 네트워크가 끊기거나 테이블 배포가 늦으면 기존 로컬 데모를 유지한다.
     }
   }
 }

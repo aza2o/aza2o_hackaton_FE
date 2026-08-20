@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../health/health_signal_source.dart';
+import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -18,7 +19,7 @@ class WearableConnectionScreen extends StatefulWidget {
 
 class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
   bool _syncing = false;
-  bool _connected = false;
+  bool _connected = AppState.instance.isDemoAccount;
   bool _usingDemo = true;
   DateTime _lastSync = DateTime.now().subtract(const Duration(minutes: 2));
   String _sleepValue = '6h 31m';
@@ -32,7 +33,11 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
   Future<void> _sync() async {
     setState(() => _syncing = true);
     try {
-      final source = _isAndroid ? AndroidHealthSource() : IosHealthSource();
+      final source = AppState.instance.isDemoAccount
+          ? const SyncedHealthSource()
+          : _isAndroid
+          ? AndroidHealthSource()
+          : IosHealthSource();
       final authorized = await source.requestAuthorization();
       if (!authorized) {
         throw const FormatException('건강 데이터 읽기 권한이 필요해요.');
@@ -49,7 +54,9 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
       final hrv = results[1] as HrvSeries?;
       final heartRate = results[2] as HeartRateSeries?;
       final hasMeasuredData =
-          sessions.isNotEmpty || hrv?.points.isNotEmpty == true || heartRate?.points.isNotEmpty == true;
+          sessions.isNotEmpty ||
+          hrv?.points.isNotEmpty == true ||
+          heartRate?.points.isNotEmpty == true;
 
       if (!mounted) return;
       setState(() {
@@ -81,9 +88,8 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _syncing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('연동하지 못했어요. $error')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('연동하지 못했어요. $error')));
     }
   }
 
@@ -144,8 +150,9 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                       const SizedBox(width: 6),
                       Text(
                         _connected ? _syncLabel : '연동 확인 필요',
-                        style: AppTypography.caption01
-                            .copyWith(color: AppColors.textSecondary),
+                        style: AppTypography.caption01.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
@@ -227,10 +234,14 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                   Expanded(
                     child: Text(
                       _isAndroid
-                          ? (_connected && !_usingDemo
-                              ? 'Galaxy Watch의 데이터가 Samsung Health와 Health Connect를 거쳐 동기화됐어요.'
-                              : 'Samsung Health > 설정 > Health Connect에서 수면과 심박 공유를 허용한 뒤 동기화해주세요. 데이터가 없으면 데모값이 표시돼요.')
-                          : 'Apple Health 권한을 허용하면 HealthKit 데이터를 동기화해요. 데이터가 없으면 데모값이 표시돼요.',
+                          ? (AppState.instance.isDemoAccount
+                                ? '심사용 계정에는 Galaxy Watch와 Health Connect에서 가져온 형식의 데모 데이터가 연결돼 있어요.'
+                                : _connected && !_usingDemo
+                                ? 'Galaxy Watch의 데이터가 Samsung Health와 Health Connect를 거쳐 동기화됐어요.'
+                                : 'Samsung Health > 설정 > Health Connect에서 수면과 심박 공유를 허용한 뒤 동기화해주세요. 데이터가 없으면 데모값이 표시돼요.')
+                          : (AppState.instance.isDemoAccount
+                                ? '심사용 계정에는 Apple Watch와 HealthKit에서 가져온 형식의 데모 데이터가 연결돼 있어요.'
+                                : 'Apple Health 권한을 허용하면 HealthKit 데이터를 동기화해요. 데이터가 없으면 데모값이 표시돼요.'),
                       style: AppTypography.caption02.copyWith(
                         color: AppColors.textTertiary,
                         height: 1.45,
@@ -256,8 +267,8 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                   _syncing
                       ? '동기화 중...'
                       : _connected
-                          ? '데이터 다시 동기화'
-                          : '$_healthPlatform 연동하기',
+                      ? '데이터 다시 동기화'
+                      : '$_healthPlatform 연동하기',
                 ),
               ),
             ),
@@ -269,7 +280,11 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
 }
 
 class _HealthMetric extends StatelessWidget {
-  const _HealthMetric({required this.icon, required this.label, required this.value});
+  const _HealthMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
   final IconData icon;
   final String label;
   final String value;
@@ -287,7 +302,12 @@ class _HealthMetric extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: AppColors.primary900),
           const SizedBox(height: 7),
-          Text(label, style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+          Text(
+            label,
+            style: AppTypography.caption03.copyWith(
+              color: AppColors.textTertiary,
+            ),
+          ),
           const SizedBox(height: 3),
           Text(value, style: AppTypography.subtitle04),
         ],
@@ -328,12 +348,18 @@ class _HealthPermissionRow extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 description,
-                style: AppTypography.caption02.copyWith(color: AppColors.textTertiary),
+                style: AppTypography.caption02.copyWith(
+                  color: AppColors.textTertiary,
+                ),
               ),
             ],
           ),
         ),
-        const Icon(Icons.check_circle_rounded, color: Color(0xFF34C759), size: 21),
+        const Icon(
+          Icons.check_circle_rounded,
+          color: Color(0xFF34C759),
+          size: 21,
+        ),
       ],
     );
   }

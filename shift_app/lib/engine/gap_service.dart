@@ -5,23 +5,25 @@
 import 'package:shift_circadian_engine/nudge/circular_time.dart';
 import 'package:shift_circadian_engine/nudge/nudge_engine.dart';
 import 'package:shift_circadian_engine/roster/constants.dart';
+
 import 'dart:math' as math;
 
-final int _demoSeed = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
+const int _demoSeed = 20260821;
 
 double _demoStartFor(int day) {
   final random = math.Random(_demoSeed + day * 7919);
   const anchors = [23.2, 23.8, 24.3, 8.4, 9.0, 24.1, 23.5];
-  return anchors[(day + 70) % anchors.length] + (random.nextInt(41) - 20) / 60.0;
+  return anchors[(day + 70) % anchors.length] +
+      (random.nextInt(41) - 20) / 60.0;
 }
 
 int _demoDurationFor(ShiftType shift, int day) {
   final random = math.Random(_demoSeed + day * 104729);
   return switch (shift) {
-    ShiftType.day => 375 + random.nextInt(66),      // 6h15m~7h20m
+    ShiftType.day => 375 + random.nextInt(66), // 6h15m~7h20m
     ShiftType.evening => 390 + random.nextInt(61), // 6h30m~7h30m
-    ShiftType.night => 330 + random.nextInt(81),   // 5h30m~6h50m
-    ShiftType.off => 420 + random.nextInt(76),     // 7h00m~8h15m
+    ShiftType.night => 330 + random.nextInt(81), // 5h30m~6h50m
+    ShiftType.off => 420 + random.nextInt(76), // 7h00m~8h15m
   };
 }
 
@@ -30,8 +32,13 @@ List<SleepSession> demoSessionsForWindow(int windowDays) {
     for (var d = -10; d < windowDays; d++)
       SleepSession(
         d * 24.0 + _demoStartFor(d),
-        d * 24.0 + _demoStartFor(d) +
-            _demoDurationFor(ShiftType.values[(d + 70) % ShiftType.values.length], d) / 60.0,
+        d * 24.0 +
+            _demoStartFor(d) +
+            _demoDurationFor(
+                  ShiftType.values[(d + 70) % ShiftType.values.length],
+                  d,
+                ) /
+                60.0,
       ),
   ];
 }
@@ -97,7 +104,9 @@ List<int> gapMinutesSeries({
       recentSessions: sessions,
     );
     final actualBedtime = sessions[i + 10].startAt;
-    final gap = circularShortestDiffHours(ideal.bedtime % 24.0, actualBedtime % 24.0) * 60.0;
+    final gap =
+        circularShortestDiffHours(ideal.bedtime % 24.0, actualBedtime % 24.0) *
+        60.0;
     out.add(gap.round());
   }
   return out;
