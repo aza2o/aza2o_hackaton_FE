@@ -41,7 +41,7 @@ dependencies:
 
   # 로스터 엑셀 업로드 — POST /roster/parse 호출 + 파일 선택
   http: ^1.2.0
-  file_picker: ^8.0.0
+  file_picker: ^10.3.10
 
   # HealthKit(iOS) / Health Connect(Android) 연동 — SHIFT_개발기획서.md §6-4
   health: ^13.3.1

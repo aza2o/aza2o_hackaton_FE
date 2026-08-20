@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- AI 리포트와 Supabase 인증/저장을 릴리스 APK에서도 사용한다. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Health Connect(수면·HRV·안정시 심박) 읽기 권한 — SHIFT_개발기획서.md §6-4 -->
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />

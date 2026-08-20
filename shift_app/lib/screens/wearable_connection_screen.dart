@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
+import '../health/health_signal_source.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -15,19 +18,73 @@ class WearableConnectionScreen extends StatefulWidget {
 
 class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
   bool _syncing = false;
+  bool _connected = false;
+  bool _usingDemo = true;
   DateTime _lastSync = DateTime.now().subtract(const Duration(minutes: 2));
+  String _sleepValue = '6h 31m';
+  String _hrvValue = '-0.3σ';
+  String _heartRateValue = '65bpm';
+
+  bool get _isAndroid => Platform.isAndroid;
+  String get _wearableName => _isAndroid ? 'Galaxy Watch' : 'Apple Watch';
+  String get _healthPlatform => _isAndroid ? 'Health Connect' : 'Apple Health';
 
   Future<void> _sync() async {
     setState(() => _syncing = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
-    setState(() {
-      _syncing = false;
-      _lastSync = DateTime.now();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('최근 Apple Health 데이터를 동기화했어요.')),
-    );
+    try {
+      final source = _isAndroid ? AndroidHealthSource() : IosHealthSource();
+      final authorized = await source.requestAuthorization();
+      if (!authorized) {
+        throw const FormatException('건강 데이터 읽기 권한이 필요해요.');
+      }
+
+      final now = DateTime.now();
+      final range = DateRange(now.subtract(const Duration(days: 14)), now);
+      final results = await Future.wait<Object?>([
+        source.sleepSessions(range),
+        source.hrvNormalized(range),
+        source.restingHeartRate(range),
+      ]);
+      final sessions = results[0] as List<HealthSleepSession>;
+      final hrv = results[1] as HrvSeries?;
+      final heartRate = results[2] as HeartRateSeries?;
+      final hasMeasuredData =
+          sessions.isNotEmpty || hrv?.points.isNotEmpty == true || heartRate?.points.isNotEmpty == true;
+
+      if (!mounted) return;
+      setState(() {
+        _syncing = false;
+        _connected = true;
+        _usingDemo = !hasMeasuredData;
+        _lastSync = DateTime.now();
+        if (sessions.isNotEmpty) {
+          final latest = sessions.last;
+          final minutes = latest.end.difference(latest.start).inMinutes;
+          _sleepValue = '${minutes ~/ 60}h ${minutes % 60}m';
+        }
+        if (hrv?.points.isNotEmpty == true) {
+          _hrvValue = '${hrv!.points.last.$2.toStringAsFixed(1)}σ';
+        }
+        if (heartRate?.points.isNotEmpty == true) {
+          _heartRateValue = '${heartRate!.points.last.$2.round()}bpm';
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            hasMeasuredData
+                ? '$_healthPlatform의 최근 건강 데이터를 동기화했어요.'
+                : '연결은 완료됐지만 최근 데이터가 없어 데모값을 표시해요.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _syncing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('연동하지 못했어요. $error')),
+      );
+    }
   }
 
   String get _syncLabel {
@@ -66,7 +123,12 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  Text('Apple Watch 연결됨', style: AppTypography.heading04),
+                  Text(
+                    _connected
+                        ? '$_wearableName 연결됨'
+                        : '$_wearableName · $_healthPlatform',
+                    style: AppTypography.heading04,
+                  ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -81,7 +143,7 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        _syncLabel,
+                        _connected ? _syncLabel : '연동 확인 필요',
                         style: AppTypography.caption01
                             .copyWith(color: AppColors.textSecondary),
                       ),
@@ -94,12 +156,12 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
             Text('최근 동기화 데이터', style: AppTypography.subtitle03),
             const SizedBox(height: AppSpacing.sm),
             Row(
-              children: const [
+              children: [
                 Expanded(
                   child: _HealthMetric(
                     icon: Icons.bedtime_outlined,
                     label: '최근 수면',
-                    value: '6h 31m',
+                    value: _sleepValue,
                   ),
                 ),
                 SizedBox(width: AppSpacing.sm),
@@ -107,7 +169,7 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                   child: _HealthMetric(
                     icon: Icons.monitor_heart_outlined,
                     label: 'HRV',
-                    value: '-0.3σ',
+                    value: _hrvValue,
                   ),
                 ),
                 SizedBox(width: AppSpacing.sm),
@@ -115,7 +177,7 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                   child: _HealthMetric(
                     icon: Icons.favorite_border_rounded,
                     label: '안정심박',
-                    value: '65bpm',
+                    value: _heartRateValue,
                   ),
                 ),
               ],
@@ -164,8 +226,11 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
-                      '시연 환경에서는 Apple Health 형식의 데모 데이터를 사용해요. '
-                      '실기기 배포 시 같은 화면에서 HealthKit 데이터로 전환됩니다.',
+                      _isAndroid
+                          ? (_connected && !_usingDemo
+                              ? 'Galaxy Watch의 데이터가 Samsung Health와 Health Connect를 거쳐 동기화됐어요.'
+                              : 'Samsung Health > 설정 > Health Connect에서 수면과 심박 공유를 허용한 뒤 동기화해주세요. 데이터가 없으면 데모값이 표시돼요.')
+                          : 'Apple Health 권한을 허용하면 HealthKit 데이터를 동기화해요. 데이터가 없으면 데모값이 표시돼요.',
                       style: AppTypography.caption02.copyWith(
                         color: AppColors.textTertiary,
                         height: 1.45,
@@ -187,7 +252,13 @@ class _WearableConnectionScreenState extends State<WearableConnectionScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.sync_rounded),
-                label: Text(_syncing ? '동기화 중...' : '데이터 다시 동기화'),
+                label: Text(
+                  _syncing
+                      ? '동기화 중...'
+                      : _connected
+                          ? '데이터 다시 동기화'
+                          : '$_healthPlatform 연동하기',
+                ),
               ),
             ),
           ],
