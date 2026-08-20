@@ -118,7 +118,9 @@ class AuthService {
     _applyLocalProfile(profile);
     await _restoreDailyCheckIns(response.user!.id);
     if (normalizedEmail == demoAccountId) {
-      AppState.instance.setDemoAccountMode(true);
+      // 서버의 건강 데이터 조회가 실패해도 근무 달력이 비지 않도록
+      // 7~9월 기본 데이터를 먼저 준비한 뒤 서버 데이터로 덮어쓴다.
+      await AppState.instance.seedDemoAccount();
       await _restoreDemoDataset(response.user!.id);
     }
     return profile;
@@ -132,7 +134,7 @@ class AuthService {
     _applyLocalProfile(profile);
     await _restoreDailyCheckIns(user.id);
     if ((user.email ?? '').toLowerCase() == demoAccountId) {
-      AppState.instance.setDemoAccountMode(true);
+      await AppState.instance.seedDemoAccount();
       await _restoreDemoDataset(user.id);
     }
   }
@@ -281,24 +283,31 @@ class AuthService {
   }
 
   static Future<void> _restoreDemoDataset(String userId) async {
+    List<Map<String, dynamic>> rosterRows = [];
+    List<Map<String, dynamic>> healthRows = [];
     try {
-      final results = await Future.wait([
-        _client
-            .from('roster_entries')
-            .select('work_date, shift_type')
-            .eq('user_id', userId)
-            .order('work_date'),
-        _client
-            .from('health_daily_metrics')
-            .select(
-              'metric_date, sleep_start, sleep_end, sleep_minutes, hrv_z, resting_heart_rate, source',
-            )
-            .eq('user_id', userId)
-            .order('metric_date'),
-      ]);
-      final rosterRows = results[0];
-      final healthRows = results[1];
+      rosterRows = await _client
+          .from('roster_entries')
+          .select('work_date, shift_type')
+          .eq('user_id', userId)
+          .order('work_date');
+    } catch (_) {
+      // 근무표 조회 실패는 로컬 7~9월 데모 시드로 복구한다.
+    }
 
+    try {
+      healthRows = await _client
+          .from('health_daily_metrics')
+          .select(
+            'metric_date, sleep_start, sleep_end, sleep_minutes, hrv_z, resting_heart_rate, source',
+          )
+          .eq('user_id', userId)
+          .order('metric_date');
+    } catch (_) {
+      // 건강 데이터가 없어도 근무표 복원은 계속한다.
+    }
+
+    try {
       AppState.instance.saveOnboarding(
         shiftTimings: const {
           ShiftType.day: (
@@ -354,7 +363,7 @@ class AuthService {
           ),
       ]);
     } catch (_) {
-      // 네트워크가 끊기거나 테이블 배포가 늦으면 기존 로컬 데모를 유지한다.
+      // 행 변환 중 문제가 생기면 기존 로컬 데모를 유지한다.
     }
   }
 }
