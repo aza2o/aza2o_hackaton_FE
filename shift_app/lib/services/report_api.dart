@@ -14,7 +14,13 @@ import 'package:shift_circadian_engine/roster/constants.dart';
 import '../engine/gap_service.dart';
 import '../state/app_state.dart';
 
-const _reportUrl = 'https://zfwmwplxezqtxxbgmieb.supabase.co/functions/v1/report';
+// 2026-08-20: 원래 프로젝트(zfwmwplxezqtxxbgmieb) 오너 초대가 막혀서 새
+// 프로젝트로 옮김 — 함수 소스는 `shift_app/supabase/functions/report/index.ts`
+// 참고. 원 함수가 쓰던 v1beta/interactions 엔드포인트는 지금 API 키
+// 형식으로 401이 나서 표준 generateContent로 교체했다. 다만 이 함수는
+// 아직 gapMinutes/sleepDebtMin/shiftPattern 3개만 읽는다 — 클라이언트가
+// 같이 보내는 skinRoutineContext/stateNote 등은 아직 프롬프트에 안 실림.
+const _reportUrl = 'https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report';
 const _reportWindowDays = 14;
 
 class AiReportResult {

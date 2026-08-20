@@ -2,7 +2,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../state/app_state.dart';
 
-const _supabaseUrl = 'https://zfwmwplxezqtxxbgmieb.supabase.co';
+// 2026-08-20: 원래 프로젝트(zfwmwplxezqtxxbgmieb) 오너 초대가 막혀서 새
+// 프로젝트(aza2o-shift-report, ap-northeast-2)로 옮김. profiles/
+// daily_check_ins 마이그레이션은 이 프로젝트에 이미 적용돼 있다
+// (shift_app/supabase/migrations/). 원 프로젝트 접근 가능해지면 다시
+// 합칠지 결정할 것.
+const _supabaseUrl = 'https://fthdvkrufjolrfuopvma.supabase.co';
 const _supabasePublishableKey =
     String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
