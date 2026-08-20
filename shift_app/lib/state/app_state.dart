@@ -74,6 +74,8 @@ class AppState extends ChangeNotifier {
     privacyConsent = false;
     aiConsent = false;
     consentAt = null;
+    aiComment = null;
+    aiCommentAt = null;
     bedtimeIntents.clear();
     _clearPersisted();
     notifyListeners();
@@ -96,10 +98,35 @@ class AppState extends ChangeNotifier {
   /// 동의한 시각 — 동의 이력은 증빙이 필요해서 언제 받았는지까지 남긴다.
   DateTime? consentAt;
 
+  /// 홈에 바로 띄우는 AI 코멘트와 받은 시각. 홈은 자주 여는 화면이라
+  /// 열 때마다 Gemini를 호출하면 호출당 비용이 그대로 늘어난다 — 하루에
+  /// 한 번만 받고 나머지는 이 캐시를 보여준다.
+  String? aiComment;
+  DateTime? aiCommentAt;
+
+  bool get hasFreshAiComment {
+    final at = aiCommentAt;
+    if (aiComment == null || at == null) return false;
+    final now = DateTime.now();
+    return at.year == now.year && at.month == now.month && at.day == now.day;
+  }
+
+  void saveAiComment(String comment) {
+    aiComment = comment;
+    aiCommentAt = DateTime.now();
+    _persist();
+    notifyListeners();
+  }
+
   void saveConsent({required bool privacy, required bool ai}) {
     privacyConsent = privacy;
     aiConsent = ai;
     consentAt = privacy ? DateTime.now() : null;
+    // 동의를 철회하면 그 결과물도 남기지 않는다.
+    if (!ai) {
+      aiComment = null;
+      aiCommentAt = null;
+    }
     _persist();
     notifyListeners();
   }
@@ -224,6 +251,8 @@ class AppState extends ChangeNotifier {
         'privacyConsent': privacyConsent,
         'aiConsent': aiConsent,
         if (consentAt != null) 'consentAt': consentAt!.toIso8601String(),
+        if (aiComment != null) 'aiComment': aiComment,
+        if (aiCommentAt != null) 'aiCommentAt': aiCommentAt!.toIso8601String(),
         if (roster != null) 'roster': [for (final s in roster!) s.name],
         if (rosterStartDate != null)
           'rosterStartDate': rosterStartDate!.toIso8601String(),
@@ -257,6 +286,9 @@ class AppState extends ChangeNotifier {
     aiConsent = json['aiConsent'] as bool? ?? false;
     final consent = json['consentAt'] as String?;
     consentAt = consent == null ? null : DateTime.parse(consent);
+    aiComment = json['aiComment'] as String?;
+    final aiAt = json['aiCommentAt'] as String?;
+    aiCommentAt = aiAt == null ? null : DateTime.parse(aiAt);
 
     final savedRoster = json['roster'] as List?;
     roster = savedRoster == null

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../engine/alertness_service.dart';
 import '../engine/gap_service.dart';
 import '../engine/nudge_service.dart';
+import '../engine/skin_routine_service.dart';
+import '../services/report_api.dart';
 import '../health/health_signal_source.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
@@ -12,7 +14,6 @@ import '../theme/app_typography.dart';
 import '../widgets/app_card.dart';
 import 'ai_report_screen.dart';
 import 'settings_screen.dart';
-import 'skin_routine_screen.dart';
 
 /// "최근 회복 상태" 카드에 쓰는 값 — 조회 실패·타임아웃·데이터 없음을 모두
 /// null로 통일한다(§6-3-c와 같은 원칙: 선택 데이터라 실패해도 화면을 막지
@@ -282,25 +283,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       },
                     ),
                   ),
-                  // 예전엔 헤더의 아이콘 2개로만 들어갈 수 있던 화면들 —
-                  // 뭔지 알아볼 수 있게 이름을 달아 카드로 내렸다.
+                  // AI 인사이트와 피부 루틴은 별도 화면으로 들어가야
+                  // 볼 수 있었다 — 탭 두 번을 없애고 여기 바로 편다.
                   const SizedBox(height: AppSpacing.xxl),
-                  _NavCard(
-                    icon: Icons.insights_rounded,
-                    title: 'AI 리포트',
-                    desc: '이번 주 리듬과 액토그램을 확인해요',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AiReportScreen()),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  _NavCard(
-                    icon: Icons.spa_rounded,
-                    title: '피부 루틴',
-                    desc: '근무 주기에 맞춘 관리 루틴',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SkinRoutineScreen()),
-                    ),
+                  const _InsightSection(),
+                  const SizedBox(height: AppSpacing.xxl),
+                  FutureBuilder<AlertnessResult>(
+                    future: _alertFuture,
+                    builder: (context, snap) {
+                      final r = snap.data;
+                      if (r == null) return const SizedBox.shrink();
+                      final routine = skinRoutineFrom(r);
+                      if (routine == null) return const SizedBox.shrink();
+                      return _SkinRoutineSection(routine: routine);
+                    },
                   ),
                 ],
               ),
@@ -508,51 +504,6 @@ class _HeaderIconButton extends StatelessWidget {
   }
 }
 
-/// 홈 하단에서 2차 화면(AI 리포트·피부 루틴)으로 가는 카드.
-class _NavCard extends StatelessWidget {
-  const _NavCard({
-    required this.icon,
-    required this.title,
-    required this.desc,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String desc;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AppCard(
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: AppColors.textPrimary),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: AppTypography.subtitle04),
-                  const SizedBox(height: 2),
-                  Text(desc,
-                      style: AppTypography.caption02
-                          .copyWith(color: AppColors.textTertiary)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                size: 20, color: AppColors.textPlaceholder),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// 완료(사용자가 직접 체크) / 놓침(예정 시각이 지났는데 미완료) / 예정
 /// (아직 시각 전) 3-상태. "언제 오는지"(시각)와 "지났는데 안 함"을 UI로
 /// 구분해달라는 요청 — 놓침은 이 앱의 핵심 가치(타이밍이 곧 효과, §7-2)를
@@ -645,6 +596,180 @@ class _RecoveryTile extends StatelessWidget {
           Text(value, style: AppTypography.subtitle03.copyWith(color: AppColors.textPrimary)),
         ],
       ),
+    );
+  }
+}
+
+/// 홈에 바로 뜨는 AI 코멘트. 예전엔 AI 리포트 화면까지 들어가야 볼 수
+/// 있었다.
+///
+/// 홈은 하루에도 여러 번 여는 화면이라 열 때마다 호출하면 Gemini 비용이
+/// 그대로 늘어난다 — 하루 한 번만 받고 그 뒤로는 캐시를 보여준다
+/// (`AppState.hasFreshAiComment`).
+class _InsightSection extends StatefulWidget {
+  const _InsightSection();
+
+  @override
+  State<_InsightSection> createState() => _InsightSectionState();
+}
+
+class _InsightSectionState extends State<_InsightSection> {
+  Future<String>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = AppState.instance;
+    if (s.aiConsent && !s.hasFreshAiComment) _future = _fetch();
+  }
+
+  Future<String> _fetch() async {
+    final r = await loadAlertness();
+    final res = await fetchAiReport(roster: r.roster, profile: r.profile);
+    AppState.instance.saveAiComment(res.comment);
+    return res.comment;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppState.instance;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('오늘의 인사이트', style: AppTypography.subtitle04),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AiReportScreen()),
+              ),
+              child: Text('리듬 자세히 보기',
+                  style: AppTypography.caption02
+                      .copyWith(color: AppColors.textSecondary)),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        AppCard(
+          child: !s.aiConsent
+              ? Text(
+                  '설정 > AI 리포트에서 동의하면 오늘의 리듬을 읽고 코멘트를 드려요.',
+                  style: AppTypography.body02
+                      .copyWith(color: AppColors.textTertiary),
+                )
+              : s.hasFreshAiComment
+                  ? Text(s.aiComment!,
+                      style: AppTypography.body02
+                          .copyWith(color: AppColors.textSecondary, height: 1.6))
+                  : FutureBuilder<String>(
+                      future: _future,
+                      builder: (context, snap) {
+                        if (snap.hasError) {
+                          return Text('인사이트를 불러오지 못했어요',
+                              style: AppTypography.body02
+                                  .copyWith(color: AppColors.textTertiary));
+                        }
+                        if (!snap.hasData) {
+                          return const SizedBox(
+                            height: 40,
+                            child: Center(
+                                child: CircularProgressIndicator(strokeWidth: 2)),
+                          );
+                        }
+                        return Text(snap.data!,
+                            style: AppTypography.body02.copyWith(
+                                color: AppColors.textSecondary, height: 1.6));
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 피부 루틴 — 별도 화면이었다가 홈 하단 섹션으로 내려왔다. 시각은
+/// 하드코딩이 아니라 오늘 수면 창에서 계산한다(`skin_routine_service.dart`).
+class _SkinRoutineSection extends StatelessWidget {
+  const _SkinRoutineSection({required this.routine});
+  final SkinRoutine routine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('피부 루틴', style: AppTypography.subtitle04),
+        const SizedBox(height: 4),
+        Text('무엇을 바르는지가 아니라 언제 바르는지를 제안해요',
+            style: AppTypography.caption02
+                .copyWith(color: AppColors.textTertiary)),
+        const SizedBox(height: AppSpacing.sm),
+        AppCard(
+          child: Column(
+            children: [
+              _RoutineRow(
+                time: routine.wakeLabel,
+                title: '주간 보호 루틴',
+                desc: '기상 직후',
+              ),
+              const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+              _RoutineRow(
+                time: routine.bedtimeLabel,
+                title: '야간 보습 루틴',
+                desc: '취침 전',
+              ),
+              if (routine.isNightShift && routine.commuteLabel != null) ...[
+                const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
+                _RoutineRow(
+                  time: routine.commuteLabel!,
+                  title: '퇴근길 선글라스',
+                  desc: '위상 전진 방지 + UV 차단',
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RoutineRow extends StatelessWidget {
+  const _RoutineRow({
+    required this.time,
+    required this.title,
+    required this.desc,
+  });
+
+  final String time;
+  final String title;
+  final String desc;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 58,
+          child: Text(time, style: AppTypography.subtitle03),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTypography.body02),
+              const SizedBox(height: 2),
+              Text(desc,
+                  style: AppTypography.caption02
+                      .copyWith(color: AppColors.textTertiary)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

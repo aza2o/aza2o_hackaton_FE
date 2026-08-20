@@ -24,14 +24,19 @@ class AuthField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 라운드를 크게, 세로 여백을 넉넉하게 — 입력칸이 납작하면 손가락으로
+    // 누르기도 불편하고 화면이 사무적으로 보인다.
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(18),
       borderSide: const BorderSide(color: AppColors.gray100),
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: AppTypography.subtitle04),
+        Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.xs),
+          child: Text(label, style: AppTypography.subtitle04),
+        ),
         const SizedBox(height: AppSpacing.sm),
         TextFormField(
           controller: controller,
@@ -43,8 +48,8 @@ class AuthField extends StatelessWidget {
             isDense: true,
             filled: true,
             fillColor: AppColors.grayWhite,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+            contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.xl, vertical: AppSpacing.xl),
             border: border,
             enabledBorder: border,
             focusedBorder: border.copyWith(
