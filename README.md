@@ -127,8 +127,13 @@ POST https://shift-roster-api-production.up.railway.app/roster/parse
 AI 인사이트는 Supabase Edge Function을 통해 Gemini 응답을 생성합니다.
 
 ```text
-POST https://zfwmwplxezqtxxbgmieb.supabase.co/functions/v1/report
+POST https://fthdvkrufjolrfuopvma.supabase.co/functions/v1/report
 ```
+
+(2026-08-20: 원래 프로젝트 오너 초대가 막혀 새 프로젝트로 옮김. 함수
+소스는 `shift_app/supabase/functions/report/index.ts`. 지금은
+`gapMinutes`/`sleepDebtMin`/`shiftPattern` 3개만 프롬프트에 반영되고,
+클라이언트가 같이 보내는 피부 프로필·상태 메모는 아직 안 실린다.)
 
 회원가입 또는 설정에서 AI 인사이트 사용에 동의해야 외부 AI 요청을
 보냅니다. 네트워크 요청에 실패하면 앱 내부의 개인화 폴백 문구를 사용합니다.
@@ -143,28 +148,25 @@ AI에는 근무 유형, 나이트 횟수, 수면 부족, 권장 취침, 직접 �
 
 ### 1. Publishable key
 
-Supabase 관리자에게 `Project Settings → API Keys`의
-`sb_publishable_...` 형식 키를 전달받습니다. `service_role` 또는 secret key는
-모바일 앱에 절대 넣지 않습니다.
+새 프로젝트(`aza2o-shift-report`)의 publishable key:
+
+```text
+sb_publishable_NHSYLKAag3fpz0noLFlbQg_KZacuPe2
+```
+
+`service_role`/secret key는 모바일 앱에 절대 넣지 않습니다.
 
 ```bash
 flutter run \
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=<PUBLISHABLE_KEY>
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_NHSYLKAag3fpz0noLFlbQg_KZacuPe2
 ```
 
 ### 2. DB 마이그레이션
 
-Supabase 관리자가 Dashboard의 SQL Editor에서 다음 파일을 순서대로
-실행해야 합니다.
-
-```text
-shift_app/supabase/migrations/20260820000000_create_profiles.sql
-shift_app/supabase/migrations/20260820010000_add_skin_profile_and_daily_check_ins.sql
-```
-
-첫 번째 파일은 사용자 프로필과 RLS 정책을 만들고, 두 번째 파일은 피부
-프로필과 날짜별 상태·고민 기록을 추가합니다. 로그인 사용자는 자신의 행만
-읽고 수정할 수 있습니다.
+`shift_app/supabase/migrations/`의 두 파일은 새 프로젝트에 이미
+적용돼 있습니다(2026-08-20). 다시 적용해야 하면 Dashboard SQL Editor에서
+파일명 순서(생성일 접두사)대로 실행하면 됩니다 — 첫 번째가 사용자
+프로필+RLS, 두 번째가 피부 프로필+날짜별 상태·고민 기록.
 
 ### 3. 이메일 인증
 
