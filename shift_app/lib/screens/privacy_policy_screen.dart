@@ -56,7 +56,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
             ),
             _Section(
               title: '6. 의료 자문이 아님',
-              body: 'SHIFT가 제공하는 취침 타이밍과 넛지는 참고용 정보이며 '
+              body: '슬립레디가 제공하는 취침 타이밍과 넛지는 참고용 정보이며 '
                   '의학적 진단·처방이 아닙니다. 수면 문제가 지속되면 '
                   '전문의와 상담하세요.',
             ),

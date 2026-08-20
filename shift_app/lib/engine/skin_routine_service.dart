@@ -7,6 +7,7 @@
 // 여기서 실제 수면 창으로 계산한다.
 import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
 import 'alertness_service.dart';
+import 'gap_service.dart';
 
 class SkinRoutine {
   const SkinRoutine({
@@ -14,6 +15,10 @@ class SkinRoutine {
     required this.bedtimeLabel,
     required this.isNightShift,
     required this.commuteLabel,
+    required this.shiftLabel,
+    required this.upcomingNightCount,
+    required this.isRecoveryMode,
+    required this.todayDeficitMinutes,
   });
 
   /// 기상 직후 — 주간 보호 루틴 시각. 예: "07:20"
@@ -28,6 +33,20 @@ class SkinRoutine {
 
   /// 나이트일 때 퇴근 예정 시각. 예: "07:00"
   final String? commuteLabel;
+
+  /// 오늘 루틴을 계산한 근무 유형. 피부 상태를 진단하는 값이 아니라,
+  /// 어떤 로스터를 기준으로 시각을 옮겼는지 설명하기 위한 값이다.
+  final String shiftLabel;
+
+  /// 오늘부터 최대 14일 동안 예정된 나이트 횟수. 사후 피부 평가가 아니라
+  /// 확정된 미래 로스터를 이용한 선제 루틴 안내에만 쓴다.
+  final int upcomingNightCount;
+
+  /// 시뮬레이터에서는 목업 워치 수면, 실기기에서는 실제 수면 세션으로
+  /// 교체될 값. 60분 이상 부족할 때 복잡한 루틴보다 단순한 장벽 루틴을
+  /// 제안한다. 피부 상태를 진단하는 값은 아니다.
+  final bool isRecoveryMode;
+  final int todayDeficitMinutes;
 }
 
 /// [r]의 오늘 수면 창에서 루틴 시각을 뽑는다. 오늘 수면 창을 못 찾으면
@@ -50,6 +69,24 @@ SkinRoutine? skinRoutineFrom(AlertnessResult r, {DateTime? now}) {
 
   final shift = r.roster[dayIndex];
   final isNight = shift == ShiftType.night;
+  final shiftLabel = switch (shift) {
+    ShiftType.day => '데이 근무',
+    ShiftType.evening => '이브닝 근무',
+    ShiftType.night => '나이트 근무',
+    ShiftType.off => '오프',
+  };
+  final windowEnd = (dayIndex + 14).clamp(0, r.roster.length);
+  final upcomingNightCount = r.roster
+      .sublist(dayIndex, windowEnd)
+      .where((s) => s == ShiftType.night)
+      .length;
+  final sleepDay = sleepDurationSeries(
+    roster: r.roster,
+    windowDays: dayIndex + 1,
+  )[dayIndex];
+  final todayDeficitMinutes = sleepDay.deficitMinutes > 0
+      ? sleepDay.deficitMinutes
+      : 0;
 
   String? commute;
   if (isNight) {
@@ -63,6 +100,10 @@ SkinRoutine? skinRoutineFrom(AlertnessResult r, {DateTime? now}) {
     bedtimeLabel: _hhmm(w.start),
     isNightShift: isNight,
     commuteLabel: commute,
+    shiftLabel: shiftLabel,
+    upcomingNightCount: upcomingNightCount,
+    isRecoveryMode: todayDeficitMinutes >= 60,
+    todayDeficitMinutes: todayDeficitMinutes,
   );
 }
 

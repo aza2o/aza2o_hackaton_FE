@@ -79,6 +79,7 @@ class DemoHealthSource implements HealthSignalSource {
   const DemoHealthSource({this.hasData = true});
 
   final bool hasData;
+  static final int _seed = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
 
   @override
   HealthCapabilities get capabilities => const HealthCapabilities(
@@ -94,25 +95,55 @@ class DemoHealthSource implements HealthSignalSource {
   @override
   Future<List<HealthSleepSession>> sleepSessions(DateRange range) async {
     if (!hasData) return const [];
+    // 교대근무자의 데모 데이터답게 취침 시각과 수면 길이가 매일 조금씩
+    // 달라진다. 요일을 키로 써서 앱을 다시 열어도 값이 갑자기 바뀌지 않는다.
+    const bedtimeAnchors = [(23, 20), (0, 10), (8, 35), (9, 5), (23, 45), (0, 25), (23, 10)];
     final sessions = <HealthSleepSession>[];
-    var night = DateTime(range.end.year, range.end.month, range.end.day)
+    var day = DateTime(range.start.year, range.start.month, range.start.day)
         .subtract(const Duration(days: 1));
-    while (!night.isBefore(range.start)) {
-      final bedtime = night.add(const Duration(hours: 22)); // 매일 22:00 취침, 7시간 데모값
-      sessions.add(HealthSleepSession(bedtime, bedtime.add(const Duration(hours: 7))));
-      night = night.subtract(const Duration(days: 1));
+    final lastDay = DateTime(range.end.year, range.end.month, range.end.day);
+    while (!day.isAfter(lastDay)) {
+      final random = math.Random(_seed + day.millisecondsSinceEpoch ~/ Duration.millisecondsPerDay);
+      final anchor = bedtimeAnchors[day.weekday - 1];
+      final jitter = random.nextInt(51) - 25;
+      final isDaySleep = anchor.$1 == 8 || anchor.$1 == 9;
+      final sleepMinutes = isDaySleep
+          ? 340 + random.nextInt(76)
+          : 385 + random.nextInt(71);
+      final bedtime = day.add(Duration(hours: anchor.$1, minutes: anchor.$2 + jitter));
+      final end = bedtime.add(Duration(minutes: sleepMinutes));
+      if (end.isAfter(range.start) && bedtime.isBefore(range.end)) {
+        sessions.add(HealthSleepSession(bedtime, end));
+      }
+      day = day.add(const Duration(days: 1));
     }
-    return sessions.reversed.toList();
+    return sessions;
   }
 
   @override
   Future<DaylightSeries?> daylight(DateRange range) async => null;
 
   @override
-  Future<HrvSeries?> hrvNormalized(DateRange range) async => null;
+  Future<HrvSeries?> hrvNormalized(DateRange range) async {
+    if (!hasData) return null;
+    final random = math.Random(_seed + range.end.day * 3571);
+    final latest = -0.6 + random.nextDouble();
+    return HrvSeries([
+      (range.end.subtract(const Duration(hours: 22)), latest + 0.15),
+      (range.end.subtract(const Duration(hours: 2)), latest),
+    ]);
+  }
 
   @override
-  Future<HeartRateSeries?> restingHeartRate(DateRange range) async => null;
+  Future<HeartRateSeries?> restingHeartRate(DateRange range) async {
+    if (!hasData) return null;
+    final random = math.Random(_seed + range.end.day * 6427);
+    final latest = 60.0 + random.nextInt(10);
+    return HeartRateSeries([
+      (range.end.subtract(const Duration(hours: 22)), latest - 2),
+      (range.end.subtract(const Duration(hours: 2)), latest),
+    ]);
+  }
 }
 
 // iOS에서 "asleep"으로 셀 카테고리 값. SLEEP_IN_BED·SLEEP_AWAKE는 제외한다

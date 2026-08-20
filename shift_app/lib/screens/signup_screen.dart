@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -34,6 +35,7 @@ class _SignupScreenState extends State<SignupScreen> {
   // 사라진다(privacy_policy_screen.dart §5).
   bool _privacyConsent = false;
   bool _aiConsent = false;
+  bool _loading = false;
 
   @override
   void dispose() {
@@ -44,18 +46,44 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    AppState.instance.saveConsent(privacy: _privacyConsent, ai: _aiConsent);
-    AppState.instance.signUp(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const OnboardingFlow()),
-      (route) => false,
-    );
+    setState(() => _loading = true);
+    try {
+      final result = await AuthService.signUp(
+        name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+        privacyConsent: _privacyConsent,
+        aiConsent: _aiConsent,
+      );
+      if (!mounted) return;
+      if (result.requiresEmailConfirmation) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => const AlertDialog(
+            title: Text('이메일을 확인해주세요'),
+            content: Text('인증 메일의 링크를 누른 뒤 로그인하면 가입이 완료돼요.'),
+          ),
+        );
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const OnboardingFlow()),
+          (route) => false,
+        );
+      }
+    } on Exception catch (error) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString().replaceFirst('AuthException: ', ''))),
+      );
+    }
   }
 
   @override
@@ -68,7 +96,7 @@ class _SignupScreenState extends State<SignupScreen> {
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
-              Text('SHIFT와 함께 리듬을 관리해요', style: AppTypography.heading04),
+              Text('슬립레디와 함께 리듬을 관리해요', style: AppTypography.heading04),
               const SizedBox(height: AppSpacing.sm),
               Text('몇 가지만 알려주시면 바로 시작할 수 있어요',
                   style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
@@ -128,8 +156,14 @@ class _SignupScreenState extends State<SignupScreen> {
                     disabledBackgroundColor: AppColors.gray100,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   ),
-                  onPressed: _privacyConsent ? _submit : null,
-                  child: Text('가입하기', style: AppTypography.button03),
+                  onPressed: _privacyConsent && !_loading ? _submit : null,
+                  child: _loading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text('가입하기', style: AppTypography.button03),
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),

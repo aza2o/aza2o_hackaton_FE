@@ -23,6 +23,18 @@ class BedtimeIntent {
   final String? note;
 }
 
+class WakeIntent {
+  const WakeIntent(this.at);
+  final DateTime at;
+}
+
+class DailyCheckIn {
+  const DailyCheckIn({required this.at, required this.tags, required this.note});
+  final DateTime at;
+  final List<String> tags;
+  final String note;
+}
+
 class AppState extends ChangeNotifier {
   AppState._();
   static final AppState instance = AppState._();
@@ -50,6 +62,16 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Supabase Auth가 검증한 사용자 정보를 로컬 앱 상태에 반영한다.
+  /// 비밀번호는 Supabase 세션만 관리하며 앱 메모리나 디스크에 보관하지 않는다.
+  void setAuthenticatedUser({required String name, required String email}) {
+    userName = name;
+    userEmail = email;
+    _userPassword = null;
+    _persist();
+    notifyListeners();
+  }
+
   /// 데모 로그인: 같은 세션에서 가입한 계정과 이메일·비밀번호가 일치하는지만
   /// 본다(§ 클래스 docstring 참고 — 서버 검증 없음).
   bool tryLogin({required String email, required String password}) {
@@ -64,19 +86,27 @@ class AppState extends ChangeNotifier {
     userName = null;
     userEmail = null;
     _userPassword = null;
+    skinType = 'combination';
+    skinConcerns = [];
+    skinSensitivities = [];
+    dailyCheckIns.clear();
     shiftTimings = null;
     roster = null;
     rosterStartDate = null;
     chronotype = 'neutral';
     caffeineCutoff = const TimeOfDay(hour: 14, minute: 0);
+    caffeineServings = 1;
     workplaceLighting = 'normal';
     bedroomLighting = 'curtain';
     privacyConsent = false;
     aiConsent = false;
+    wearableConsent = false;
     consentAt = null;
     aiComment = null;
     aiCommentAt = null;
+    aiCommentFormat = null;
     bedtimeIntents.clear();
+    wakeIntents.clear();
     _clearPersisted();
     notifyListeners();
   }
@@ -86,6 +116,7 @@ class AppState extends ChangeNotifier {
   String bedroomLighting = 'curtain'; // blackout | curtain | none
   String chronotype = 'neutral'; // morning | neutral | evening
   TimeOfDay caffeineCutoff = const TimeOfDay(hour: 14, minute: 0);
+  int caffeineServings = 1; // 0 | 1 | 2 | 3(3잔 이상)
 
   /// 개인정보 수집·이용 동의(필수). 가입 시 받는다.
   bool privacyConsent = false;
@@ -94,6 +125,7 @@ class AppState extends ChangeNotifier {
   /// 외부 호출을 하지 않는다. 필수 동의와 분리해야 하는 이유는
   /// [PrivacyPolicyScreen] §5 참고: 거부해도 계산·넛지는 쓸 수 있어야 한다.
   bool aiConsent = false;
+  bool wearableConsent = false;
 
   /// 동의한 시각 — 동의 이력은 증빙이 필요해서 언제 받았는지까지 남긴다.
   DateTime? consentAt;
@@ -103,10 +135,14 @@ class AppState extends ChangeNotifier {
   /// 한 번만 받고 나머지는 이 캐시를 보여준다.
   String? aiComment;
   DateTime? aiCommentAt;
+  String? aiCommentFormat;
+  static const currentAiCommentFormat = 'home_sleep_first_coach_v8';
 
   bool get hasFreshAiComment {
     final at = aiCommentAt;
-    if (aiComment == null || at == null) return false;
+    if (aiComment == null || at == null || aiCommentFormat != currentAiCommentFormat) {
+      return false;
+    }
     final now = DateTime.now();
     return at.year == now.year && at.month == now.month && at.day == now.day;
   }
@@ -114,6 +150,15 @@ class AppState extends ChangeNotifier {
   void saveAiComment(String comment) {
     aiComment = comment;
     aiCommentAt = DateTime.now();
+    aiCommentFormat = currentAiCommentFormat;
+    _persist();
+    notifyListeners();
+  }
+
+  void clearAiComment() {
+    aiComment = null;
+    aiCommentAt = null;
+    aiCommentFormat = null;
     _persist();
     notifyListeners();
   }
@@ -126,7 +171,14 @@ class AppState extends ChangeNotifier {
     if (!ai) {
       aiComment = null;
       aiCommentAt = null;
+      aiCommentFormat = null;
     }
+    _persist();
+    notifyListeners();
+  }
+
+  void saveWearableConsent(bool value) {
+    wearableConsent = value;
     _persist();
     notifyListeners();
   }
@@ -143,11 +195,71 @@ class AppState extends ChangeNotifier {
   // "지금 누웠어요" 로그. Drift/서버 스키마 붙기 전까지는 메모리에만 쌓인다
   // — 여러 번 눌러도(false start 등) 전부 기록하고, 최신순으로 앞에 둔다.
   final List<BedtimeIntent> bedtimeIntents = [];
+  final List<WakeIntent> wakeIntents = [];
+  final List<DailyCheckIn> dailyCheckIns = [];
+  String skinType = 'combination';
+  List<String> skinConcerns = [];
+  List<String> skinSensitivities = [];
+
+  bool get hasOpenManualSleep {
+    if (bedtimeIntents.isEmpty) return false;
+    if (wakeIntents.isEmpty) return true;
+    return bedtimeIntents.first.at.isAfter(wakeIntents.first.at);
+  }
+
+  Duration? get latestManualSleepDuration {
+    if (bedtimeIntents.isEmpty || wakeIntents.isEmpty) return null;
+    final start = bedtimeIntents.first.at;
+    final end = wakeIntents.first.at;
+    return end.isAfter(start) ? end.difference(start) : null;
+  }
 
   void logBedtimeIntent({String? note}) {
     bedtimeIntents.insert(0, BedtimeIntent(DateTime.now(), note: note));
     _persist();
     notifyListeners();
+  }
+
+  void logWakeIntent() {
+    if (!hasOpenManualSleep) return;
+    wakeIntents.insert(0, WakeIntent(DateTime.now()));
+    _persist();
+    notifyListeners();
+  }
+
+  void saveSkinProfile({
+    required String type,
+    required List<String> concerns,
+    required List<String> sensitivities,
+  }) {
+    skinType = type;
+    skinConcerns = List.of(concerns);
+    skinSensitivities = List.of(sensitivities);
+    _persist();
+    notifyListeners();
+  }
+
+  void saveDailyCheckIn({required List<String> tags, required String note}) {
+    dailyCheckIns.insert(
+      0,
+      DailyCheckIn(at: DateTime.now(), tags: List.of(tags), note: note.trim()),
+    );
+    if (dailyCheckIns.length > 90) dailyCheckIns.removeRange(90, dailyCheckIns.length);
+    _persist();
+    notifyListeners();
+  }
+
+  void replaceDailyCheckIns(List<DailyCheckIn> entries) {
+    dailyCheckIns
+      ..clear()
+      ..addAll(entries.take(90));
+    _persist();
+    notifyListeners();
+  }
+
+  List<DailyCheckIn> recentCheckIns({int days = 14}) {
+    final since = DateTime.now().subtract(Duration(days: days));
+    return dailyCheckIns.where((entry) => entry.at.isAfter(since)).toList();
   }
 
   void saveOnboarding({
@@ -156,12 +268,14 @@ class AppState extends ChangeNotifier {
     required String bedroomLighting,
     required String chronotype,
     required TimeOfDay caffeineCutoff,
+    int caffeineServings = 1,
   }) {
     this.shiftTimings = Map.of(shiftTimings);
     this.workplaceLighting = workplaceLighting;
     this.bedroomLighting = bedroomLighting;
     this.chronotype = chronotype;
     this.caffeineCutoff = caffeineCutoff;
+    this.caffeineServings = caffeineServings;
     _persist();
     notifyListeners();
   }
@@ -248,11 +362,17 @@ class AppState extends ChangeNotifier {
         'bedroomLighting': bedroomLighting,
         'chronotype': chronotype,
         'caffeineCutoffMin': _toMinutes(caffeineCutoff),
+        'caffeineServings': caffeineServings,
+        'skinType': skinType,
+        'skinConcerns': skinConcerns,
+        'skinSensitivities': skinSensitivities,
         'privacyConsent': privacyConsent,
         'aiConsent': aiConsent,
+        'wearableConsent': wearableConsent,
         if (consentAt != null) 'consentAt': consentAt!.toIso8601String(),
         if (aiComment != null) 'aiComment': aiComment,
         if (aiCommentAt != null) 'aiCommentAt': aiCommentAt!.toIso8601String(),
+        if (aiCommentFormat != null) 'aiCommentFormat': aiCommentFormat,
         if (roster != null) 'roster': [for (final s in roster!) s.name],
         if (rosterStartDate != null)
           'rosterStartDate': rosterStartDate!.toIso8601String(),
@@ -260,6 +380,18 @@ class AppState extends ChangeNotifier {
         'bedtimeIntents': [
           for (final i in bedtimeIntents.take(60))
             {'at': i.at.toIso8601String(), 'note': i.note},
+        ],
+        'wakeIntents': [
+          for (final i in wakeIntents.take(60))
+            {'at': i.at.toIso8601String()},
+        ],
+        'dailyCheckIns': [
+          for (final entry in dailyCheckIns.take(90))
+            {
+              'at': entry.at.toIso8601String(),
+              'tags': entry.tags,
+              'note': entry.note,
+            },
         ],
       };
 
@@ -282,13 +414,21 @@ class AppState extends ChangeNotifier {
     bedroomLighting = json['bedroomLighting'] as String? ?? 'curtain';
     chronotype = json['chronotype'] as String? ?? 'neutral';
     caffeineCutoff = _fromMinutes(json['caffeineCutoffMin'] as int? ?? 14 * 60);
+    caffeineServings = json['caffeineServings'] as int? ?? 1;
+    skinType = json['skinType'] as String? ?? 'combination';
+    skinConcerns = [for (final value in (json['skinConcerns'] as List? ?? [])) value as String];
+    skinSensitivities = [
+      for (final value in (json['skinSensitivities'] as List? ?? [])) value as String,
+    ];
     privacyConsent = json['privacyConsent'] as bool? ?? false;
     aiConsent = json['aiConsent'] as bool? ?? false;
+    wearableConsent = json['wearableConsent'] as bool? ?? false;
     final consent = json['consentAt'] as String?;
     consentAt = consent == null ? null : DateTime.parse(consent);
     aiComment = json['aiComment'] as String?;
     final aiAt = json['aiCommentAt'] as String?;
     aiCommentAt = aiAt == null ? null : DateTime.parse(aiAt);
+    aiCommentFormat = json['aiCommentFormat'] as String?;
 
     final savedRoster = json['roster'] as List?;
     roster = savedRoster == null
@@ -305,6 +445,22 @@ class AppState extends ChangeNotifier {
           BedtimeIntent(
             DateTime.parse((i as Map)['at'] as String),
             note: i['note'] as String?,
+          ),
+      ]);
+    wakeIntents
+      ..clear()
+      ..addAll([
+        for (final i in (json['wakeIntents'] as List? ?? []))
+          WakeIntent(DateTime.parse((i as Map)['at'] as String)),
+      ]);
+    dailyCheckIns
+      ..clear()
+      ..addAll([
+        for (final raw in (json['dailyCheckIns'] as List? ?? []))
+          DailyCheckIn(
+            at: DateTime.parse((raw as Map)['at'] as String),
+            tags: [for (final tag in (raw['tags'] as List? ?? [])) tag as String],
+            note: raw['note'] as String? ?? '',
           ),
       ]);
   }

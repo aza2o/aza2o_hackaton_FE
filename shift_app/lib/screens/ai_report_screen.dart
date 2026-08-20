@@ -37,8 +37,15 @@ class _ActogramData {
 /// 목표 취침(`idealSleepTimes`)은 실제 수면 이력이 아니라 [r.sleep](근무표
 /// 기반 예측 수면)을 폴백 이력으로 재사용한다 — 아직 헬스 연동 전이라
 /// `report_api.dart`의 데모 세션과 마찬가지로 근사치다.
-_ActogramData _buildRows(AlertnessResult r) {
-  final n = r.roster.length < 7 ? r.roster.length : 7;
+_ActogramData _buildRows(AlertnessResult r, int segment) {
+  final limit = segment == 0 ? 7 : 14;
+  final allIndices = List<int>.generate(
+    r.roster.length < limit ? r.roster.length : limit,
+    (i) => i,
+  );
+  final indices = segment == 2
+      ? allIndices.where((i) => r.roster[i] != ShiftType.off).take(8).toList()
+      : allIndices;
   final rows = <ActogramRow>[];
   final sleepAbs = [for (final w in r.sleep) (w.start, w.end)];
   final recentSessions = [for (final w in r.sleep) SleepSession(w.start, w.end)];
@@ -46,7 +53,7 @@ _ActogramData _buildRows(AlertnessResult r) {
   DateTime? calloutDate;
   int? calloutGapMin;
 
-  for (var i = 0; i < n; i++) {
+  for (final i in indices) {
     final dayStart = i * 24.0;
     final dayEnd = dayStart + 48.0;
     final shift = r.roster[i];
@@ -123,6 +130,9 @@ class _AiReportScreenState extends State<AiReportScreen> {
   static const _segments = ['주간', '월간', '근무루틴별'];
   late Future<AlertnessResult> _future;
   Future<AiReportResult>? _reportFuture;
+  final _scrollController = ScrollController();
+  final _insightKey = GlobalKey();
+  bool _requesting = false;
 
   final _noteController = TextEditingController();
 
@@ -149,6 +159,7 @@ class _AiReportScreenState extends State<AiReportScreen> {
   @override
   void dispose() {
     _noteController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -164,9 +175,47 @@ class _AiReportScreenState extends State<AiReportScreen> {
         stateNote: _stateNote.isEmpty ? null : _stateNote,
       ));
 
-  void _requestReport() {
-    setState(() => _reportFuture = _buildReportFuture());
+  Future<void> _requestReport() async {
+    final request = _buildReportFuture();
+    setState(() {
+      _requesting = true;
+      _reportFuture = request;
+    });
+    try {
+      await request;
+      if (!mounted) return;
+      setState(() => _requesting = false);
+      final target = _insightKey.currentContext;
+      if (target != null) {
+        await Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          alignment: 0.12,
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _requesting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('조언을 불러오지 못했어요. 잠시 후 다시 시도해주세요.')),
+      );
+    }
   }
+
+  String get _periodTitle => const ['이번 주 리듬', '최근 한 달 리듬', '근무 루틴별 리듬'][_segment];
+
+  String get _periodDescription => const [
+        '최근 7일 · 근무와 수면의 연결',
+        '최근 14일 · 누적 수면 부족과 회복 추세',
+        '오프를 제외한 근무일 · 교대 유형별 차이',
+      ][_segment];
+
+  String get _periodSummary => const [
+        '이번 주는 나이트 전후 수면 시작 시각의 흔들림이 가장 컸어요.',
+        '2주 동안 수면 부족이 누적됐지만 오프 다음 날에는 회복되는 흐름이 보여요.',
+        '나이트 근무일의 취침 지연이 데이·이브닝보다 크고 회복까지 더 오래 걸려요.',
+      ][_segment];
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +223,7 @@ class _AiReportScreenState extends State<AiReportScreen> {
       appBar: AppBar(title: const Text('AI 리포트')),
       body: SafeArea(
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
             _SegmentedControl(
@@ -186,9 +236,9 @@ class _AiReportScreenState extends State<AiReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('이번 주 리듬', style: AppTypography.subtitle02),
+                  Text(_periodTitle, style: AppTypography.subtitle02),
                   const SizedBox(height: 4),
-                  Text('근무 · 수면 · 예측 DLMO',
+                  Text(_periodDescription,
                       style: AppTypography.caption02
                           .copyWith(color: AppColors.textTertiary)),
                   const SizedBox(height: AppSpacing.lg),
@@ -204,7 +254,7 @@ class _AiReportScreenState extends State<AiReportScreen> {
                         return const SizedBox(
                             height: 160, child: Center(child: CircularProgressIndicator()));
                       }
-                      final data = _buildRows(result);
+                      final data = _buildRows(result, _segment);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -230,6 +280,20 @@ class _AiReportScreenState extends State<AiReportScreen> {
                       _LegendDot(color: AppColors.information01, label: '목표 취침'),
                       _LegendDot(color: AppColors.error01, label: '컨디션 저하 구간'),
                     ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.gray50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _periodSummary,
+                      style: AppTypography.caption01
+                          .copyWith(color: AppColors.textSecondary, height: 1.45),
+                    ),
                   ),
                 ],
               ),
@@ -280,13 +344,27 @@ class _AiReportScreenState extends State<AiReportScreen> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14)),
                 ),
-                onPressed:
-                    AppState.instance.aiConsent ? _requestReport : null,
-                child: Text('이 상태로 조언 받기', style: AppTypography.button03),
+                onPressed: AppState.instance.aiConsent && !_requesting
+                    ? _requestReport
+                    : null,
+                child: _requesting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.gray900,
+                        ),
+                      )
+                    : Text('이 상태로 조언 받기', style: AppTypography.button03),
               ),
             ),
             const SizedBox(height: AppSpacing.xxl),
-            Text('이번 주 인사이트', style: AppTypography.subtitle03),
+            Text(
+              const ['이번 주 인사이트', '월간 변화 인사이트', '근무 루틴 인사이트'][_segment],
+              key: _insightKey,
+              style: AppTypography.subtitle03,
+            ),
             const SizedBox(height: AppSpacing.sm),
             if (!AppState.instance.aiConsent)
               const _AiConsentNotice()

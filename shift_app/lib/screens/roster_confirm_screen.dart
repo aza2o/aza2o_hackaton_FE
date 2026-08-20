@@ -62,11 +62,22 @@ class _RosterConfirmScreenState extends State<RosterConfirmScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('$_month월 근무표 확인')),
+      appBar: AppBar(
+        title: Text(
+          '$_year년 $_month월 근무표 확인',
+          style: AppTypography.subtitle03.copyWith(color: AppColors.textPrimary),
+        ),
+        foregroundColor: AppColors.textPrimary,
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
+            Text(
+              '$_year년 $_month월',
+              style: AppTypography.heading04,
+            ),
+            const SizedBox(height: AppSpacing.xs),
             Text('${widget.userName} 간호사 · 잘못된 날짜는 눌러서 수정하세요',
                 style: AppTypography.body02.copyWith(color: AppColors.textSecondary)),
             const SizedBox(height: AppSpacing.lg),

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
 import 'screens/login_screen.dart';
+import 'screens/onboarding_flow.dart';
 import 'screens/root_shell.dart';
+import 'services/auth_service.dart';
 import 'state/app_state.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AuthService.initialize();
   // 저장된 세션 복원 — 있으면 로그인·온보딩을 건너뛰고 바로 홈으로 간다.
   await AppState.instance.load();
+  await AuthService.restoreLocalProfile();
   runApp(const ShiftApp());
 }
 
@@ -18,7 +22,7 @@ class ShiftApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SHIFT',
+      title: '슬립레디',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       // 최초 실행 플로우: 로그인/회원가입(또는 게스트) → 온보딩 →
@@ -29,7 +33,9 @@ class ShiftApp extends StatelessWidget {
       // — 로그인만 하고 온보딩 중에 앱을 껐다면 다시 온보딩부터다.
       home: AppState.instance.hasProfile
           ? const RootShell()
-          : const LoginScreen(),
+          : AuthService.isAuthenticated
+              ? const OnboardingFlow()
+              : const LoginScreen(),
     );
   }
 }

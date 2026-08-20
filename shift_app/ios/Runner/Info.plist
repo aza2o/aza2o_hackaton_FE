@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Shift App</string>
+	<string>슬립레디</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -29,7 +29,18 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>수면·HRV·심박·일광 노출 데이터를 읽어 교대근무 리듬을 계산하는 데 사용합니다.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>SHIFT는 건강 데이터를 기록하지 않고 읽기만 합니다.</string>
+	<string>슬립레디는 건강 데이터를 기록하지 않고 읽기만 합니다.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

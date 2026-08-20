@@ -20,9 +20,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
-  flutter_local_notifications: 395056b3175ba4f08480a7c5de30cd36d69827e4
-  health: 4decf5d74e8f54c58a8c07a385fc72f629a831d9
+  flutter_local_notifications: df98d66e515e1ca797af436137b4459b160ad8c9
+  health: c1dfe8bc28ccd5998a32bdd0963943bfe9ac8320
 
 PODFILE CHECKSUM: 3ba3a73b1b12adcf321a227a745625fe0888cc82
 
-COCOAPODS: 1.17.0
+COCOAPODS: 1.16.2

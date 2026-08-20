@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shift_circadian_engine/roster/constants.dart' show ShiftType;
 import '../health/health_signal_source.dart';
+import '../services/auth_service.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
@@ -26,7 +27,7 @@ class OnboardingFlow extends StatefulWidget {
 class _OnboardingFlowState extends State<OnboardingFlow> {
   final _controller = PageController();
   int _step = 0;
-  static const _totalSteps = 4;
+  static const _totalSteps = 5;
 
   // 온보딩에서 수집하는 값들 (UserProfile에 대응 — logic/constants.py 참고)
   final Map<ShiftType, (TimeOfDay, TimeOfDay)> _shiftTimings = {
@@ -38,11 +39,19 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   String _bedroomLighting = 'curtain'; // blackout | curtain | none
   String _chronotype = 'neutral'; // morning | neutral | evening
   TimeOfDay _caffeineCutoff = const TimeOfDay(hour: 14, minute: 0);
+  int _caffeineServings = 1; // 0 | 1 | 2 | 3(3잔 이상)
+  String _skinType = 'combination';
+  final Set<String> _skinConcerns = {};
+  final Set<String> _skinSensitivities = {};
 
   // 헬스 연동 체크(§4단계에 병합, 로드맵 "온보딩 — 권한 요청 직후 7일치
   // 조회 → 비면 안내 화면 분기"). 플랫폼별 실기기 어댑터 사용.
   late final HealthSignalSource _healthSource = widget.healthSource ??
-      (defaultTargetPlatform == TargetPlatform.android ? AndroidHealthSource() : IosHealthSource());
+      (kDebugMode
+          ? const DemoHealthSource()
+          : defaultTargetPlatform == TargetPlatform.android
+              ? AndroidHealthSource()
+              : IosHealthSource());
   bool _healthCheckLoading = false;
   List<HealthSleepSession>? _healthSessions; // null = 아직 확인 안 함
 
@@ -67,7 +76,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     });
   }
 
-  void _next() {
+  Future<void> _next() async {
     if (_step < _totalSteps - 1) {
       setState(() => _step++);
       _controller.nextPage(
@@ -79,7 +88,23 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         bedroomLighting: _bedroomLighting,
         chronotype: _chronotype,
         caffeineCutoff: _caffeineCutoff,
+        caffeineServings: _caffeineServings,
       );
+      AppState.instance.saveSkinProfile(
+        type: _skinType,
+        concerns: _skinConcerns.toList(),
+        sensitivities: _skinSensitivities.toList(),
+      );
+      try {
+        await AuthService.updateSkinProfile(
+          skinType: _skinType,
+          concerns: _skinConcerns.toList(),
+          sensitivities: _skinSensitivities.toList(),
+        );
+      } catch (_) {
+        // 로컬 프로필은 이미 저장됐다. 네트워크 복구 후 다시 동기화할 수 있다.
+      }
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const PermissionScreen()));
     }
@@ -130,8 +155,23 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                   _ChronotypeCaffeineStep(
                     chronotype: _chronotype,
                     caffeineCutoff: _caffeineCutoff,
+                    caffeineServings: _caffeineServings,
                     onChronotypeChanged: (v) => setState(() => _chronotype = v),
                     onCaffeineChanged: (v) => setState(() => _caffeineCutoff = v),
+                    onCaffeineServingsChanged: (v) =>
+                        setState(() => _caffeineServings = v),
+                  ),
+                  _SkinProfileStep(
+                    skinType: _skinType,
+                    concerns: _skinConcerns,
+                    sensitivities: _skinSensitivities,
+                    onTypeChanged: (value) => setState(() => _skinType = value),
+                    onConcernToggle: (value) => setState(() {
+                      if (!_skinConcerns.add(value)) _skinConcerns.remove(value);
+                    }),
+                    onSensitivityToggle: (value) => setState(() {
+                      if (!_skinSensitivities.add(value)) _skinSensitivities.remove(value);
+                    }),
                   ),
                   _CalibrationStep(
                     healthChecked: _healthSessions != null,
@@ -370,14 +410,18 @@ class _ChronotypeCaffeineStep extends StatelessWidget {
   const _ChronotypeCaffeineStep({
     required this.chronotype,
     required this.caffeineCutoff,
+    required this.caffeineServings,
     required this.onChronotypeChanged,
     required this.onCaffeineChanged,
+    required this.onCaffeineServingsChanged,
   });
 
   final String chronotype;
   final TimeOfDay caffeineCutoff;
+  final int caffeineServings;
   final ValueChanged<String> onChronotypeChanged;
   final ValueChanged<TimeOfDay> onCaffeineChanged;
+  final ValueChanged<int> onCaffeineServingsChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -395,31 +439,191 @@ class _ChronotypeCaffeineStep extends StatelessWidget {
             onChanged: onChronotypeChanged,
           ),
           const SizedBox(height: AppSpacing.xxl),
-          Text('카페인은 보통 몇 시까지 마시나요?', style: AppTypography.subtitle04),
+          Text('마지막 카페인은 보통 언제 마시나요?', style: AppTypography.subtitle04),
+          const SizedBox(height: 4),
+          Text(
+            '커피뿐 아니라 에너지음료, 차 등 카페인이 든 음료를 마지막으로 마시는 시각이에요.',
+            style: AppTypography.caption01.copyWith(color: AppColors.textSecondary),
+          ),
           const SizedBox(height: AppSpacing.sm),
           Builder(builder: (context) {
-            return OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.gray200),
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              onPressed: () async {
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () async {
                 final picked = await showTimePicker(
                     context: context, initialTime: caffeineCutoff);
                 if (picked != null) onCaffeineChanged(picked);
               },
-              child: Text(caffeineCutoff.format(context), style: AppTypography.body02),
+                child: Ink(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.grayWhite,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.gray100),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.schedule_rounded,
+                          color: AppColors.primary900,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Text(
+                          '마지막 섭취 시각',
+                          style: AppTypography.body02.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        _fmt24(caffeineCutoff),
+                        style: AppTypography.subtitle03.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppColors.gray300,
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             );
           }),
+          const SizedBox(height: AppSpacing.xxl),
+          Text('하루에 보통 얼마나 마시나요?', style: AppTypography.subtitle04),
+          const SizedBox(height: 4),
+          Text(
+            '커피 한 잔 또는 카페인 음료 한 캔을 1잔으로 생각해 주세요.',
+            style: AppTypography.caption01.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _ChoiceRow(
+            options: const {'0': '안 마심', '1': '1잔', '2': '2잔', '3': '3잔 이상'},
+            value: caffeineServings.toString(),
+            onChanged: (value) => onCaffeineServingsChanged(int.parse(value)),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Step 4 — 캘리브레이션 진행도 노출(리텐션 장치, §5-1) + 헬스 연동 체크
+class _SkinProfileStep extends StatelessWidget {
+  const _SkinProfileStep({
+    required this.skinType,
+    required this.concerns,
+    required this.sensitivities,
+    required this.onTypeChanged,
+    required this.onConcernToggle,
+    required this.onSensitivityToggle,
+  });
+
+  final String skinType;
+  final Set<String> concerns;
+  final Set<String> sensitivities;
+  final ValueChanged<String> onTypeChanged;
+  final ValueChanged<String> onConcernToggle;
+  final ValueChanged<String> onSensitivityToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return _StepScaffold(
+      title: '피부 리듬도 알려주세요',
+      subtitle: '근무와 수면 변화에 따라 달라지는 피부 행동을 더 정확히 골라드려요',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('평소 피부 타입', style: AppTypography.subtitle04),
+          const SizedBox(height: AppSpacing.sm),
+          _ChoiceRow(
+            options: const {
+              'dry': '건성',
+              'oily': '지성',
+              'combination': '복합성',
+              'sensitive': '민감성',
+            },
+            value: skinType,
+            onChanged: onTypeChanged,
+          ),
+          const SizedBox(height: AppSpacing.xxl),
+          Text('반복되는 고민', style: AppTypography.subtitle04),
+          const SizedBox(height: 4),
+          Text('여러 개 선택할 수 있어요',
+              style: AppTypography.caption02.copyWith(color: AppColors.textTertiary)),
+          const SizedBox(height: AppSpacing.sm),
+          _SkinMultiChoice(
+            options: const ['턱·귀 트러블', '건조·당김', '유분·면포', '붉음·열감', '색소·칙칙함'],
+            selected: concerns,
+            onToggle: onConcernToggle,
+          ),
+          const SizedBox(height: AppSpacing.xxl),
+          Text('쉽게 자극받는 상황', style: AppTypography.subtitle04),
+          const SizedBox(height: AppSpacing.sm),
+          _SkinMultiChoice(
+            options: const ['마스크 마찰', '향료', '각질 관리', '레티놀·활성 성분', '밤샘 근무 후'],
+            selected: sensitivities,
+            onToggle: onSensitivityToggle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkinMultiChoice extends StatelessWidget {
+  const _SkinMultiChoice({required this.options, required this.selected, required this.onToggle});
+  final List<String> options;
+  final Set<String> selected;
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.xs,
+      runSpacing: AppSpacing.xs,
+      children: [
+        for (final option in options)
+          FilterChip(
+            label: Text(option),
+            selected: selected.contains(option),
+            selectedColor: AppColors.primary50,
+            checkmarkColor: AppColors.primary900,
+            onSelected: (_) => onToggle(option),
+          ),
+      ],
+    );
+  }
+}
+
+/// Step 5 — 캘리브레이션 진행도 노출(리텐션 장치, §5-1) + 헬스 연동 체크
 /// (로드맵 "온보딩 — 권한 요청 직후 7일치 조회 → 비면 안내 화면 분기"를
 /// 별도 화면이 아니라 이 단계에 병합하기로 함).
 class _CalibrationStep extends StatelessWidget {
@@ -453,27 +657,102 @@ class _CalibrationStep extends StatelessWidget {
             onCheck: onCheckHealth,
           ),
           const SizedBox(height: AppSpacing.xxl),
-          for (final (label, done) in [
-            ('로스터 입력', true),
-            ('첫 넛지 발송', false),
-            ('웨어러블 연동(선택)', _hasHealthData),
-            ('개인화 위상 추정 시작', false),
+          for (final (label, done, helpTitle, helpBody) in [
+            (
+              '로스터 입력',
+              true,
+              '로스터란?',
+              '병원에서 정해진 근무 일정표를 뜻해요. Day, Evening, Night, Off 일정을 입력하면 슬립레디가 근무일별 수면 계획과 넛지 시각을 계산해요.'
+            ),
+            (
+              '첫 넛지 발송',
+              false,
+              '넛지란?',
+              '생활을 강제하지 않고 더 나은 선택을 돕는 짧은 안내예요. 슬립레디는 로스터와 목표 취침 시각을 바탕으로 카페인을 멈출 때, 빛을 줄일 때, 잠들 준비를 시작할 때 등을 알림으로 알려드려요.'
+            ),
+            ('웨어러블 연동(선택)', _hasHealthData, null, null),
+            ('개인화 위상 추정 시작', false, null, null),
           ])
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.md),
               child: Row(
                 children: [
                   Icon(
-                    done ? Icons.check_circle : Icons.circle_outlined,
-                    color: done ? AppColors.success01 : AppColors.gray300,
+                    _calibrationIcon(label, done),
+                    color: done ? AppColors.success01 : AppColors.textTertiary,
                     size: 20,
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Text(label, style: AppTypography.body02),
+                  if (helpTitle != null && helpBody != null) ...[
+                    const SizedBox(width: 6),
+                    _HelpButton(title: helpTitle, body: helpBody),
+                  ],
+                  const Spacer(),
+                  Text(
+                    _calibrationStatus(label, done),
+                    style: AppTypography.caption02.copyWith(
+                      color: done ? AppColors.success01 : AppColors.textTertiary,
+                    ),
+                  ),
                 ],
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+IconData _calibrationIcon(String label, bool done) {
+  if (done) return Icons.check_circle;
+  if (label.startsWith('첫 넛지')) return Icons.notifications_none_rounded;
+  if (label.startsWith('웨어러블')) return Icons.watch_outlined;
+  return Icons.auto_graph_rounded;
+}
+
+String _calibrationStatus(String label, bool done) {
+  if (done) return '완료';
+  if (label.startsWith('첫 넛지')) return '시작 후 자동';
+  if (label.startsWith('웨어러블')) return '선택';
+  return '데이터 누적 후';
+}
+
+class _HelpButton extends StatelessWidget {
+  const _HelpButton({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(title, style: AppTypography.heading04),
+          content: Text(body, style: AppTypography.body02),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('확인', style: AppTypography.button03),
+            ),
+          ],
+        ),
+      ),
+      child: Container(
+        width: 22,
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.gray300),
+        ),
+        child: Text(
+          '?',
+          style: AppTypography.caption02.copyWith(color: AppColors.textSecondary),
+        ),
       ),
     );
   }

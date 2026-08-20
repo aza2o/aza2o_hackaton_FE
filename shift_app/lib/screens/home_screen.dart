@@ -13,6 +13,8 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/app_card.dart';
 import 'ai_report_screen.dart';
+import 'quick_advice_result_screen.dart';
+import '../services/auth_service.dart';
 import 'settings_screen.dart';
 
 /// "최근 회복 상태" 카드에 쓰는 값 — 조회 실패·타임아웃·데이터 없음을 모두
@@ -80,6 +82,16 @@ String _formatTodayKo(DateTime d) => '${d.month}월 ${d.day}일 ${_weekdaysKo[d.
 String _fmtTime(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
+String _manualSleepSummary(AppState state) {
+  final start = state.bedtimeIntents.first.at;
+  final end = state.wakeIntents.first.at;
+  final duration = state.latestManualSleepDuration;
+  if (duration == null) return '${_fmtTime(start)}에 수면 시작을 기록했어요';
+  final hours = duration.inMinutes ~/ 60;
+  final minutes = duration.inMinutes % 60;
+  return '${_fmtTime(start)} 취침 · ${_fmtTime(end)} 기상 · ${hours}h ${minutes}m';
+}
+
 /// 기존 확정 디자인(구 Figma 파일 `29:3772`, 낮/오프·나이트/이브닝 2 variant)을
 /// 하나의 위젯으로 구현한다. 낮/쿨톤 배경 분기는 더 이상 수동 스위치가
 /// 아니라 `NudgeService`가 실제 로스터(`AppState`, 없으면 데모)로 계산한
@@ -98,9 +110,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late Future<TodayNudges> _future;
   late Future<AlertnessResult> _alertFuture;
-  late Future<List<int>> _gapFuture;
+  late Future<List<SleepDurationDay>> _sleepDurationFuture;
   late final HealthSignalSource _healthSource = widget.healthSource ??
-      (defaultTargetPlatform == TargetPlatform.android ? AndroidHealthSource() : IosHealthSource());
+      (kDebugMode
+          ? const DemoHealthSource()
+          : defaultTargetPlatform == TargetPlatform.android
+              ? AndroidHealthSource()
+              : IosHealthSource());
   late Future<_RecoveryStats> _recoveryFuture;
 
   // 행동별 완료 체크 — 인메모리 상태다(§ AppState와 동일하게 영구저장 전까지는
@@ -112,11 +128,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _future = loadTodayNudges();
     _alertFuture = loadAlertness();
-    _gapFuture = _alertFuture.then((r) => gapMinutesSeries(
-          roster: r.roster,
-          shiftTimings: r.profile.shiftTimings,
-          commuteMinutes: r.profile.commuteMinutes,
-        ));
+    _sleepDurationFuture =
+        _alertFuture.then((r) => sleepDurationSeries(roster: r.roster));
     _recoveryFuture = _loadRecovery(_healthSource);
   }
 
@@ -201,6 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (!_completedActions.add(i)) _completedActions.remove(i);
                       }),
                       onLogBedtime: () => setState(() => AppState.instance.logBedtimeIntent()),
+                      onLogWake: () => setState(() => AppState.instance.logWakeIntent()),
                     ),
                   FutureBuilder<AlertnessResult>(
                     future: _alertFuture,
@@ -257,36 +271,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   ),
                   const SizedBox(height: AppSpacing.xxl),
-                  Text('최근 2주 취침 격차', style: AppTypography.subtitle04),
+                  Text('최근 2주 권장 수면량', style: AppTypography.subtitle04),
                   const SizedBox(height: 4),
-                  Text('목표 취침 대비 몇 분 늦거나 일렀는지',
+                  Text('근무와 누적 부족분을 반영한 권장량 대비 실제 수면',
                       style: AppTypography.caption02.copyWith(color: AppColors.textTertiary)),
                   const SizedBox(height: AppSpacing.sm),
                   AppCard(
-                    child: FutureBuilder<List<int>>(
-                      future: _gapFuture,
-                      builder: (context, gapSnapshot) {
-                        final gaps = gapSnapshot.data;
-                        if (gapSnapshot.hasError) {
+                    child: FutureBuilder<List<SleepDurationDay>>(
+                      future: _sleepDurationFuture,
+                      builder: (context, sleepSnapshot) {
+                        final days = sleepSnapshot.data;
+                        if (sleepSnapshot.hasError) {
                           return const SizedBox(
                             height: 120,
-                            child: Center(child: Text('격차 추이를 불러오지 못했어요')),
+                            child: Center(child: Text('수면량을 불러오지 못했어요')),
                           );
                         }
                         // 다른 보조 섹션(최근 회복 상태 등)과 같은 원칙 —
                         // 선택 데이터라 로딩 중에도 스피너 없이 빈 자리만
                         // 유지한다(레이아웃 점프만 방지).
-                        if (gaps == null || gaps.isEmpty) {
+                        if (days == null || days.isEmpty) {
                           return const SizedBox(height: 120);
                         }
-                        return _GapTrendChart(gapMinutes: gaps);
+                        return _SleepDurationChart(days: days);
                       },
                     ),
                   ),
                   // AI 인사이트와 피부 루틴은 별도 화면으로 들어가야
                   // 볼 수 있었다 — 탭 두 번을 없애고 여기 바로 편다.
-                  const SizedBox(height: AppSpacing.xxl),
-                  const _InsightSection(),
                   const SizedBox(height: AppSpacing.xxl),
                   FutureBuilder<AlertnessResult>(
                     future: _alertFuture,
@@ -308,29 +320,57 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// 최근 2주(최대 14일)치 "목표 취침 - 실측 취침" 격차(분) 라인차트.
-/// 데이터는 `gap_service.dart`(AI 리포트 POST body와 동일 소스) 재사용.
-class _GapTrendChart extends StatelessWidget {
-  const _GapTrendChart({required this.gapMinutes});
-  final List<int> gapMinutes;
+class _SleepDurationChart extends StatelessWidget {
+  const _SleepDurationChart({required this.days});
+  final List<SleepDurationDay> days;
 
   @override
   Widget build(BuildContext context) {
-    final maxAbs = gapMinutes.map((g) => g.abs()).fold<int>(30, (a, b) => a > b ? a : b);
-    final bound = (maxAbs / 10).ceil() * 10 + 10;
+    final averageTarget = days.fold<int>(0, (sum, d) => sum + d.targetMinutes) ~/ days.length;
+    final averageActual = days.fold<int>(0, (sum, d) => sum + d.actualMinutes) ~/ days.length;
+    final totalDeficit = days.fold<int>(0, (sum, d) => sum + (d.deficitMinutes > 0 ? d.deficitMinutes : 0));
+    final maxSleep = days
+        .expand((d) => [d.targetMinutes, d.actualMinutes])
+        .fold<int>(8 * 60, (a, b) => a > b ? a : b);
+    final bound = ((maxSleep / 60).ceil() * 60 + 60).toDouble();
 
     return SizedBox(
-      height: 140,
-      child: LineChart(
-        LineChartData(
-          minY: -bound.toDouble(),
-          maxY: bound.toDouble(),
-          minX: 0,
-          maxX: (gapMinutes.length - 1).toDouble(),
-          gridData: const FlGridData(show: false),
+      height: 250,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: _SleepSummary(label: '평균 권장', minutes: averageTarget)),
+              Expanded(child: _SleepSummary(label: '평균 실제', minutes: averageActual)),
+              Expanded(child: _SleepSummary(label: '누적 부족', minutes: totalDeficit)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              _SleepLegend(color: AppColors.gray300, label: '권장 수면'),
+              const SizedBox(width: AppSpacing.md),
+              _SleepLegend(color: AppColors.primary500, label: '실제 수면'),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Expanded(
+            child: BarChart(
+              BarChartData(
+          minY: 0,
+          maxY: bound,
+          alignment: BarChartAlignment.spaceAround,
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: 120,
+            getDrawingHorizontalLine: (_) =>
+                const FlLine(color: AppColors.gray100, strokeWidth: 1),
+          ),
           borderData: FlBorderData(show: false),
           extraLinesData: ExtraLinesData(horizontalLines: [
-            HorizontalLine(y: 0, color: AppColors.gray300, strokeWidth: 1),
+            HorizontalLine(y: 0, color: AppColors.gray300, strokeWidth: 1.5),
           ]),
           titlesData: FlTitlesData(
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -339,43 +379,116 @@ class _GapTrendChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 34,
-                interval: bound.toDouble(),
-                getTitlesWidget: (value, meta) => Text('${value.round()}분',
-                    style: AppTypography.caption03.copyWith(color: AppColors.textPlaceholder)),
+                interval: 120,
+                getTitlesWidget: (value, meta) => Text(
+                  value == 0 ? '0' : '${(value / 60).round()}h',
+                  style: AppTypography.caption03
+                      .copyWith(color: AppColors.textPlaceholder),
+                ),
               ),
             ),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 20,
-                interval: (gapMinutes.length / 4).ceilToDouble(),
-                getTitlesWidget: (value, meta) => Text('${value.round() + 1}일',
-                    style: AppTypography.caption03.copyWith(color: AppColors.textPlaceholder)),
+                getTitlesWidget: (value, meta) {
+                  final day = value.round() + 1;
+                  final show = day == 1 || day == 5 || day == 9 || day == days.length;
+                  return Text(show ? '$day일' : '',
+                      style: AppTypography.caption03
+                          .copyWith(color: AppColors.textPlaceholder));
+                },
               ),
             ),
           ),
-          lineTouchData: LineTouchData(
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipItems: (spots) => spots
-                  .map((s) => LineTooltipItem('${s.y.round()}분', AppTypography.caption02))
-                  .toList(),
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
+                  BarTooltipItem(_sleepTooltip(days[group.x]), AppTypography.caption02),
             ),
           ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: [
-                for (var i = 0; i < gapMinutes.length; i++)
-                  FlSpot(i.toDouble(), gapMinutes[i].toDouble()),
-              ],
-              isCurved: false,
-              color: AppColors.information01,
-              barWidth: 2,
-              dotData: const FlDotData(show: true),
-              belowBarData: BarAreaData(show: false),
-            ),
+          barGroups: [
+            for (var i = 0; i < days.length; i++)
+              BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(
+                    toY: days[i].targetMinutes.toDouble(),
+                    width: 7,
+                    color: AppColors.gray300,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  BarChartRodData(
+                    toY: days[i].actualMinutes.toDouble(),
+                    width: 7,
+                    color: AppColors.primary500,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ],
+              ),
           ],
-        ),
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+String _durationLabel(int minutes) {
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  return '${h}h ${m.toString().padLeft(2, '0')}m';
+}
+
+String _sleepTooltip(SleepDurationDay day) {
+  final deficit = day.deficitMinutes;
+  return '권장 ${_durationLabel(day.targetMinutes)}\n'
+      '실제 ${_durationLabel(day.actualMinutes)}\n'
+      '${deficit > 0 ? '${_durationLabel(deficit)} 부족' : '목표 충족'}';
+}
+
+class _SleepSummary extends StatelessWidget {
+  const _SleepSummary({required this.label, required this.minutes});
+  final String label;
+  final int minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+        const SizedBox(height: 2),
+        Text(_durationLabel(minutes), style: AppTypography.subtitle04),
+      ],
+    );
+  }
+}
+
+class _SleepLegend extends StatelessWidget {
+  const _SleepLegend({required this.color, required this.label});
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(label,
+            style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+      ],
     );
   }
 }
@@ -387,6 +500,7 @@ class _TodayContent extends StatelessWidget {
     required this.completedActions,
     required this.onToggleAction,
     required this.onLogBedtime,
+    required this.onLogWake,
   });
 
   final bool isNight;
@@ -394,6 +508,7 @@ class _TodayContent extends StatelessWidget {
   final Set<int> completedActions;
   final ValueChanged<int> onToggleAction;
   final VoidCallback onLogBedtime;
+  final VoidCallback onLogWake;
 
   @override
   Widget build(BuildContext context) {
@@ -419,11 +534,8 @@ class _TodayContent extends StatelessWidget {
               const SizedBox(height: 4),
               Text(data.planLabel,
                   style: AppTypography.heading01.copyWith(color: AppColors.grayWhite)),
-              if (data.summary.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.md),
-                Text(data.summary,
-                    style: AppTypography.body02.copyWith(color: AppColors.gray300)),
-              ],
+              const SizedBox(height: AppSpacing.md),
+              _InsightSection(fallback: data.summary),
               const SizedBox(height: AppSpacing.lg),
               SizedBox(
                 width: double.infinity,
@@ -433,14 +545,34 @@ class _TodayContent extends StatelessWidget {
                     side: const BorderSide(color: AppColors.gray600),
                     padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
                   ),
-                  onPressed: onLogBedtime,
-                  child: const Text('지금 누웠어요'),
+                  onPressed: AppState.instance.hasOpenManualSleep
+                      ? onLogWake
+                      : onLogBedtime,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        AppState.instance.hasOpenManualSleep
+                            ? Icons.wb_sunny_outlined
+                            : Icons.bedtime_outlined,
+                        size: 18,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        AppState.instance.hasOpenManualSleep
+                            ? '지금 일어났어요'
+                            : '지금 누웠어요',
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (AppState.instance.bedtimeIntents.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '오늘 ${_fmtTime(AppState.instance.bedtimeIntents.first.at)}에 기록했어요',
+                  AppState.instance.hasOpenManualSleep
+                      ? '${_fmtTime(AppState.instance.bedtimeIntents.first.at)}부터 수면 시작으로 기록 중이에요'
+                      : _manualSleepSummary(AppState.instance),
                   style: AppTypography.caption03.copyWith(color: AppColors.gray400),
                 ),
               ],
@@ -607,7 +739,9 @@ class _RecoveryTile extends StatelessWidget {
 /// 그대로 늘어난다 — 하루 한 번만 받고 그 뒤로는 캐시를 보여준다
 /// (`AppState.hasFreshAiComment`).
 class _InsightSection extends StatefulWidget {
-  const _InsightSection();
+  const _InsightSection({required this.fallback});
+
+  final String fallback;
 
   @override
   State<_InsightSection> createState() => _InsightSectionState();
@@ -615,17 +749,54 @@ class _InsightSection extends StatefulWidget {
 
 class _InsightSectionState extends State<_InsightSection> {
   Future<String>? _future;
+  String? _previousComment;
 
   @override
   void initState() {
     super.initState();
     final s = AppState.instance;
+    s.addListener(_onAppStateChanged);
     if (s.aiConsent && !s.hasFreshAiComment) _future = _fetch();
+  }
+
+  @override
+  void dispose() {
+    AppState.instance.removeListener(_onAppStateChanged);
+    super.dispose();
+  }
+
+  void _onAppStateChanged() {
+    if (!mounted) return;
+    final s = AppState.instance;
+    if (!s.aiConsent) {
+      setState(() => _future = null);
+      return;
+    }
+    if (!s.hasFreshAiComment && _future == null) {
+      setState(() {
+        _future = _fetch();
+      });
+      return;
+    }
+    setState(() {});
+  }
+
+  void _refreshInsight() {
+    if (!AppState.instance.aiConsent) return;
+    _previousComment = AppState.instance.aiComment;
+    setState(() => _future = null);
+    AppState.instance.clearAiComment();
   }
 
   Future<String> _fetch() async {
     final r = await loadAlertness();
-    final res = await fetchAiReport(roster: r.roster, profile: r.profile);
+    final res = await fetchAiReport(
+      roster: r.roster,
+      profile: r.profile,
+      previousComment: _previousComment,
+    );
+    // 요청 도중 동의를 철회했다면 늦게 도착한 응답을 저장하거나 노출하지 않는다.
+    if (!AppState.instance.aiConsent) return '';
     AppState.instance.saveAiComment(res.comment);
     return res.comment;
   }
@@ -633,58 +804,307 @@ class _InsightSectionState extends State<_InsightSection> {
   @override
   Widget build(BuildContext context) {
     final s = AppState.instance;
+    final fallback = widget.fallback.isEmpty
+        ? '오늘의 근무와 수면 흐름에 맞춰 회복할 시간을 준비해보세요.'
+        : widget.fallback;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('오늘의 인사이트', style: AppTypography.subtitle04),
-            const Spacer(),
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const AiReportScreen()),
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.zero,
+      color: Colors.transparent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(color: AppColors.gray600, height: 1),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded,
+                  color: AppColors.primary500, size: 17),
+              const SizedBox(width: AppSpacing.sm),
+              Text('AI 오늘의 한 줄',
+                  style: AppTypography.caption02.copyWith(
+                    color: AppColors.primary400,
+                    fontWeight: FontWeight.w700,
+                  )),
+              const Spacer(),
+              if (s.aiConsent)
+                GestureDetector(
+                  onTap: _refreshInsight,
+                  child: const Icon(Icons.refresh_rounded,
+                      color: AppColors.gray400, size: 17),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (!s.aiConsent)
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.gray100,
+                  backgroundColor: AppColors.gray800,
+                  side: const BorderSide(color: AppColors.gray500),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                ),
+                icon: const Icon(Icons.settings_outlined, size: 18),
+                label: const Text('설정에서 AI 인사이트 켜기'),
               ),
-              child: Text('리듬 자세히 보기',
-                  style: AppTypography.caption02
-                      .copyWith(color: AppColors.textSecondary)),
+            )
+          else if (s.hasFreshAiComment)
+            Text(s.aiComment!,
+                style: AppTypography.body02
+                    .copyWith(color: AppColors.grayWhite, height: 1.5))
+          else
+            FutureBuilder<String>(
+              future: _future,
+              builder: (context, snap) {
+                final text = snap.hasData ? snap.data! : fallback;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(text,
+                          style: AppTypography.body02.copyWith(
+                            color: snap.hasError
+                                ? AppColors.gray300
+                                : AppColors.grayWhite,
+                            height: 1.5,
+                          )),
+                    ),
+                    if (snap.connectionState == ConnectionState.waiting) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary500,
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          if (s.aiConsent) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.grayWhite,
+                      side: const BorderSide(color: AppColors.gray500),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.sm,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      backgroundColor: AppColors.grayWhite,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                      ),
+                      builder: (_) => const _QuickAdviceSheet(),
+                    ),
+                    icon: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 16,
+                    ),
+                    label: Text(
+                      '상태·고민 전달',
+                      style: AppTypography.caption02,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.gray200,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.sm,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AiReportScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.insights_outlined, size: 16),
+                    label: Text(
+                      '리듬 자세히 보기',
+                      style: AppTypography.caption02,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAdviceSheet extends StatefulWidget {
+  const _QuickAdviceSheet();
+
+  @override
+  State<_QuickAdviceSheet> createState() => _QuickAdviceSheetState();
+}
+
+class _QuickAdviceSheetState extends State<_QuickAdviceSheet> {
+  static const _choices = ['많이 피곤해요', '잠이 잘 안 와요', '자꾸 깨요', '피부가 예민해요'];
+  final _controller = TextEditingController();
+  final _selected = <String>{};
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final typed = _controller.text.trim();
+    final note = [..._selected, if (typed.isNotEmpty) typed].join(', ');
+    if (note.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('오늘 상태나 고민을 하나 이상 알려주세요.')),
+      );
+      return;
+    }
+    setState(() {
+      _loading = true;
+    });
+    try {
+      AppState.instance.saveDailyCheckIn(
+        tags: _selected.toList(),
+        note: typed,
+      );
+      try {
+        await AuthService.saveDailyCheckIn(tags: _selected.toList(), note: typed);
+      } catch (_) {
+        // AI 답변은 서버 체크인 동기화 실패와 별개로 계속 제공한다.
+      }
+      final rhythm = await loadAlertness();
+      final result = await fetchAiReport(
+        roster: rhythm.roster,
+        profile: rhythm.profile,
+        stateNote: note,
+      );
+      if (!mounted) return;
+      final nightCount = rhythm.roster.where((shift) => shift.name == 'night').length;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => QuickAdviceResultScreen(
+            userState: note,
+            aiAnalysis: result.comment,
+            nightShiftCount: nightCount,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI 조언을 불러오지 못했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        MediaQuery.viewInsetsOf(context).bottom + AppSpacing.lg,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.gray200,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text('오늘 상태와 고민 전달', style: AppTypography.subtitle02),
+            const SizedBox(height: 4),
+            Text(
+              '근무와 수면 리듬을 함께 읽고 지금 할 수 있는 행동을 제안해드려요.',
+              style: AppTypography.caption02.copyWith(color: AppColors.textTertiary),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [
+                for (final choice in _choices)
+                  ChoiceChip(
+                    label: Text(choice),
+                    selected: _selected.contains(choice),
+                    selectedColor: AppColors.primary500,
+                    onSelected: (_) => setState(() {
+                      if (!_selected.add(choice)) _selected.remove(choice);
+                    }),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _controller,
+              minLines: 3,
+              maxLines: 5,
+              maxLength: stateNoteMaxLength,
+              decoration: InputDecoration(
+                hintText: '예: 귀와 턱 주변 트러블이 반복되고 잠도 자주 깨요',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _send,
+                child: _loading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('AI에게 바로 전달하기'),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
-        AppCard(
-          child: !s.aiConsent
-              ? Text(
-                  '설정 > AI 리포트에서 동의하면 오늘의 리듬을 읽고 코멘트를 드려요.',
-                  style: AppTypography.body02
-                      .copyWith(color: AppColors.textTertiary),
-                )
-              : s.hasFreshAiComment
-                  ? Text(s.aiComment!,
-                      style: AppTypography.body02
-                          .copyWith(color: AppColors.textSecondary, height: 1.6))
-                  : FutureBuilder<String>(
-                      future: _future,
-                      builder: (context, snap) {
-                        if (snap.hasError) {
-                          return Text('인사이트를 불러오지 못했어요',
-                              style: AppTypography.body02
-                                  .copyWith(color: AppColors.textTertiary));
-                        }
-                        if (!snap.hasData) {
-                          return const SizedBox(
-                            height: 40,
-                            child: Center(
-                                child: CircularProgressIndicator(strokeWidth: 2)),
-                          );
-                        }
-                        return Text(snap.data!,
-                            style: AppTypography.body02.copyWith(
-                                color: AppColors.textSecondary, height: 1.6));
-                      },
-                    ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -702,9 +1122,103 @@ class _SkinRoutineSection extends StatelessWidget {
       children: [
         Text('피부 루틴', style: AppTypography.subtitle04),
         const SizedBox(height: 4),
-        Text('무엇을 바르는지가 아니라 언제 바르는지를 제안해요',
+        Text('벽시계의 AM·PM 대신, 내 근무와 수면에 맞춘 생체 루틴',
             style: AppTypography.caption02
                 .copyWith(color: AppColors.textTertiary)),
+        const SizedBox(height: AppSpacing.sm),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: AppColors.primary50,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome_rounded,
+                      color: AppColors.primary900, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      '오늘은 ${routine.shiftLabel} 기준',
+                      style: AppTypography.subtitle04,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                '${routine.wakeLabel} 기상부터 ${routine.bedtimeLabel} 주 수면까지를 '
+                '하나의 생체 하루로 보고 루틴 시각을 배치했어요.',
+                style: AppTypography.caption01.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+              if (routine.isRecoveryMode) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: AppColors.grayWhite,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.bedtime_outlined,
+                          color: AppColors.primary900, size: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          '회복 모드 · 오늘 권장 수면보다 ${routine.todayDeficitMinutes}분 부족해요. '
+                          '여러 단계를 더하기보다 세안과 장벽 보습 중심으로 단순하게 제안해요.',
+                          style: AppTypography.caption02.copyWith(
+                            color: AppColors.textSecondary,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (routine.upcomingNightCount > 0) ...[
+                const SizedBox(height: AppSpacing.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.grayWhite,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_month_rounded,
+                          color: AppColors.textSecondary, size: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          '앞으로 2주간 나이트 ${routine.upcomingNightCount}회 · '
+                          '수면 시각이 바뀌면 피부 루틴도 함께 이동해요.',
+                          style: AppTypography.caption02.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
         const SizedBox(height: AppSpacing.sm),
         AppCard(
           child: Column(
@@ -712,25 +1226,77 @@ class _SkinRoutineSection extends StatelessWidget {
               _RoutineRow(
                 time: routine.wakeLabel,
                 title: '주간 보호 루틴',
-                desc: '기상 직후',
+                desc: '기상 직후 · 순한 세안 → 보습 → 자외선 차단',
+                reason: '벽시계 아침이 아니라 오늘의 생체 기상 직후에 맞췄어요.',
+                productSlot: 'AAC 선케어 · 주간 보호 제품군',
               ),
               const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
               _RoutineRow(
                 time: routine.bedtimeLabel,
-                title: '야간 보습 루틴',
-                desc: '취침 전',
+                title: routine.isRecoveryMode ? '회복 모드 루틴' : '야간 보습 루틴',
+                desc: routine.isRecoveryMode
+                    ? '주 수면 직전 · 순한 세안 → 진정·장벽 보습'
+                    : '주 수면 직전 · 세안 → 보습 중심으로 단순하게',
+                reason: routine.isRecoveryMode
+                    ? '수면 부족이 큰 날이라 자극을 늘리지 않는 구성이에요.'
+                    : '오늘의 주 수면 직전을 생체 PM으로 사용해요.',
+                productSlot: 'AAC 진정 · 장벽 보습 제품군',
               ),
               if (routine.isNightShift && routine.commuteLabel != null) ...[
                 const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
                 _RoutineRow(
                   time: routine.commuteLabel!,
-                  title: '퇴근길 선글라스',
-                  desc: '위상 전진 방지 + UV 차단',
+                  title: '나이트 퇴근길 보호',
+                  desc: '선글라스 + 자외선 차단 · 빛 노출도 함께 줄여요',
+                  reason: '아침 퇴근길의 빛과 자외선을 한 행동으로 함께 관리해요.',
+                  productSlot: 'AAC 휴대용 선케어 제품군',
                 ),
               ],
             ],
           ),
         ),
+        if (routine.upcomingNightCount > 0) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: AppColors.primary50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.primary400),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('AAC 제품 연동 데모',
+                    style: AppTypography.caption02
+                        .copyWith(color: AppColors.primary900)),
+                const SizedBox(height: 4),
+                Text('나이트 ${routine.upcomingNightCount}회 준비 키트',
+                    style: AppTypography.subtitle04
+                        .copyWith(color: AppColors.textPrimary)),
+                const SizedBox(height: AppSpacing.sm),
+                Text('순한 클렌저 · 진정/장벽 보습 · 휴대용 선케어',
+                    style: AppTypography.body02
+                        .copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: AppSpacing.md),
+                SizedBox(
+                  height: 154,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: const [
+                      _HomeDemoProduct(Icons.water_drop_outlined, '클렌저', 'Calm Wash', Color(0xFFDDEEFF)),
+                      _HomeDemoProduct(Icons.spa_outlined, '미스트', 'Reset Mist', Color(0xFFE4F2E8)),
+                      _HomeDemoProduct(Icons.science_outlined, '세럼', 'Barrier Drop', Color(0xFFFFE7D7)),
+                      _HomeDemoProduct(Icons.bubble_chart_outlined, '크림', 'Night Shield', Color(0xFFE8E4F5)),
+                      _HomeDemoProduct(Icons.wb_sunny_outlined, '선케어', 'SleepReady UV', Color(0xFFFFF0C8)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -741,11 +1307,15 @@ class _RoutineRow extends StatelessWidget {
     required this.time,
     required this.title,
     required this.desc,
+    required this.reason,
+    required this.productSlot,
   });
 
   final String time;
   final String title;
   final String desc;
+  final String reason;
+  final String productSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -766,10 +1336,88 @@ class _RoutineRow extends StatelessWidget {
               Text(desc,
                   style: AppTypography.caption02
                       .copyWith(color: AppColors.textTertiary)),
+              const SizedBox(height: AppSpacing.sm),
+              Text(reason,
+                  style: AppTypography.caption03.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  )),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(productSlot,
+                    style: AppTypography.caption03.copyWith(
+                      color: AppColors.primary900,
+                      fontWeight: FontWeight.w700,
+                    )),
+              ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HomeDemoProduct extends StatelessWidget {
+  const _HomeDemoProduct(this.icon, this.type, this.name, this.color);
+
+  final IconData icon;
+  final String type;
+  final String name;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 118,
+      margin: const EdgeInsets.only(right: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.grayWhite,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.gray100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 66,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Stack(
+              children: [
+                Center(child: Icon(icon, size: 30, color: AppColors.gray700)),
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.grayWhite,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('DEMO', style: AppTypography.caption03),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(type, style: AppTypography.caption03.copyWith(color: AppColors.textTertiary)),
+          const SizedBox(height: 2),
+          Text(name, maxLines: 1, style: AppTypography.caption02.copyWith(fontWeight: FontWeight.w700)),
+        ],
+      ),
     );
   }
 }

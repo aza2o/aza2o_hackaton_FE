@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../state/app_state.dart';
+import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -7,6 +8,7 @@ import '../widgets/app_card.dart';
 import 'login_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'roster_upload_screen.dart';
+import 'wearable_connection_screen.dart';
 
 /// 기존 확정 디자인(구 Figma 파일 `35:3968`)을 그대로 구현.
 ///
@@ -21,6 +23,129 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  Future<void> _openWearableConnection() async {
+    if (!AppState.instance.wearableConsent) {
+      final agreed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('Apple Health를 연결할까요?', style: AppTypography.subtitle02),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '슬립레디가 내 수면과 회복 상태를 계산할 수 있도록 다음 건강 데이터를 읽어요.',
+                style: AppTypography.body02,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const _HealthConsentLine(
+                icon: Icons.bedtime_outlined,
+                text: '수면 시작·종료 및 수면 단계',
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const _HealthConsentLine(
+                icon: Icons.monitor_heart_outlined,
+                text: '심박변이도 HRV',
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              const _HealthConsentLine(
+                icon: Icons.favorite_outline_rounded,
+                text: '안정시 심박수',
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                '데이터는 읽기 전용이며 건강 앱에 새 기록을 작성하지 않아요. '
+                '연결하지 않아도 근무표 기반 기능은 사용할 수 있어요.',
+                style: AppTypography.caption02.copyWith(
+                  color: AppColors.textTertiary,
+                  height: 1.45,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('나중에'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Apple Health 연결하기'),
+            ),
+          ],
+        ),
+      );
+      if (agreed != true || !mounted) return;
+      AppState.instance.saveWearableConsent(true);
+      setState(() {});
+    }
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const WearableConnectionScreen()),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _updateAiConsent(bool value) async {
+    AppState.instance.saveConsent(
+      privacy: AppState.instance.privacyConsent,
+      ai: value,
+    );
+    setState(() {});
+    try {
+      await AuthService.updateConsent(
+        privacyConsent: AppState.instance.privacyConsent,
+        aiConsent: value,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('동의 설정을 서버에 저장하지 못했어요. 다시 시도해주세요.')),
+      );
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    final name = AppState.instance.userName;
+    final isGuest = name == null || name == '게스트';
+
+    if (isGuest) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('게스트 모드 로그아웃', style: AppTypography.subtitle02),
+          content: Text(
+            '게스트 모드에서 로그아웃하면 근무표와 수면 기록 등 저장된 데이터가 삭제될 수 있어요. 그래도 로그아웃하시겠습니까?',
+            style: AppTypography.body02,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('취소'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                '그래도 로그아웃',
+                style: AppTypography.button03.copyWith(color: AppColors.error01),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    await AuthService.signOut();
+    AppState.instance.signOut();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,7 +187,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         label: '근무표 관리', value: '', showChevron: true),
                   ),
                   const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
-                  _SettingsRow(label: '웨어러블 연동', value: 'Apple Health'),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _openWearableConnection,
+                    child: _SettingsRow(
+                      label: '웨어러블 연동',
+                      value: AppState.instance.wearableConsent ? '연동됨' : '연결하기',
+                      showChevron: true,
+                    ),
+                  ),
                   const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
                   _SettingsRow(label: '구독 서비스', value: '무료 플랜'),
                 ],
@@ -102,12 +235,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       Switch(
                         value: AppState.instance.aiConsent,
-                        onChanged: (v) => setState(() {
-                          AppState.instance.saveConsent(
-                            privacy: AppState.instance.privacyConsent,
-                            ai: v,
-                          );
-                        }),
+                        onChanged: _updateAiConsent,
                       ),
                     ],
                   ),
@@ -132,13 +260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const Divider(height: AppSpacing.xxl, color: AppColors.gray100),
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      AppState.instance.signOut();
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                      );
-                    },
+                    onTap: _handleSignOut,
                     child: Row(
                       children: [
                         Text('로그아웃',
@@ -152,6 +274,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HealthConsentLine extends StatelessWidget {
+  const _HealthConsentLine({required this.icon, required this.text});
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.primary50,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.primary900),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(child: Text(text, style: AppTypography.caption01)),
+      ],
     );
   }
 }

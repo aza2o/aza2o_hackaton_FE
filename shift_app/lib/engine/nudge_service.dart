@@ -61,9 +61,8 @@ String _formatClock(double absHours) {
   return '${hh.toString().padLeft(2, '0')}:${mm.toString().padLeft(2, '0')}';
 }
 
-/// 데모 수면 이력(워치 데이터 목업). [todayIndex] 이전 10일 동안 매일
-/// 22:00 취침·7시간 수면으로 채운다 — currentPhase(§2-②) 5일 창과
-/// sleepDebtMin 7일 창을 모두 안전하게 덮는다.
+/// 데모 수면 이력(워치 데이터 목업). 교대근무자의 취침 이동과 수면 길이
+/// 변동을 재현하면서 currentPhase 5일 창과 sleepDebtMin 7일 창을 덮는다.
 ///
 /// 반드시 [todayIndex] 기준으로 생성해야 한다 — 로스터 0일차 기준 고정폭
 /// (예전 구현)으로 두면, todayIndex가 0에서 멀어질수록(로스터 시작일이
@@ -72,8 +71,14 @@ String _formatClock(double absHours) {
 /// 로스터·홈 연동이 깨졌었다.
 List<SleepSession> _demoRecentSessions(int todayIndex) {
   final base = todayIndex * 24.0;
+  const starts = [23.3, 24.1, 23.7, 8.6, 9.1, 24.4, 23.2, 23.8, 24.0, 23.5, 23.4];
+  const durations = [6.9, 6.3, 7.2, 5.9, 6.5, 6.7, 7.1, 6.2, 6.8, 7.0, 6.6];
   return [
-    for (var d = -10; d <= 0; d++) SleepSession(base + d * 24.0 + 22.0, base + d * 24.0 + 29.0),
+    for (var d = -10; d <= 0; d++)
+      SleepSession(
+        base + d * 24.0 + starts[d + 10],
+        base + d * 24.0 + starts[d + 10] + durations[d + 10],
+      ),
   ];
 }
 

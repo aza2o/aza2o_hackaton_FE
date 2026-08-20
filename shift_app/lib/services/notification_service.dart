@@ -78,7 +78,7 @@ class NotificationService {
     const details = NotificationDetails(
       android: AndroidNotificationDetails(
         'shift_nudge',
-        'SHIFT 넛지',
+        '슬립레디 넛지',
         channelDescription: '근무 리듬에 맞춘 행동 알림',
         importance: Importance.high,
         priority: Priority.high,

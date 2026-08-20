@@ -54,6 +54,7 @@ dependencies:
   # 단순 라인이라 fl_chart로 충분함 — 체크리스트 §3-5 참고.
   fl_chart: ^1.2.0
   shared_preferences: ^2.5.5
+  supabase_flutter: ^2.0.0
 
 dev_dependencies:
   flutter_test:
